@@ -16,13 +16,13 @@ export default defineEventHandler(async (event) => {
   }
 
   const config = useRuntimeConfig(event)
-  const expectedUser = String(config.administratorUsername || '')
+  const expectedUser = String(config.administratorUsername || 'admin')
   const expectedPass = String(config.administratorPassword || '')
 
-  if (!expectedUser || !expectedPass) {
+  if (!expectedPass) {
     throw createError({
       statusCode: 503,
-      statusMessage: 'Administrator credentials are not configured',
+      statusMessage: 'Administrator password is not configured',
     })
   }
 
