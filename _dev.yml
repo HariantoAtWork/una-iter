@@ -23,8 +23,8 @@ services:
       - ADMINISTRATOR_PASSWORD=${ADMINISTRATOR_PASSWORD:-}
       - NUXT_ADMINISTRATOR_USERNAME=${ADMINISTRATOR_USERNAME:-}
       - NUXT_ADMINISTRATOR_PASSWORD=${ADMINISTRATOR_PASSWORD:-}
-      - NUXT_DATA_ROOT=${NUXT_DATA_ROOT:-/var/lib/literoute}
-      - NUXT_APP_SECRET=${NUXT_APP_SECRET:-}
+      # Container path for the mounted data volume (do not use host-relative ./data).
+      - NUXT_DATA_ROOT=/var/lib/literoute
 
 volumes:
   literoute-dev-modules:

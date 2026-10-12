@@ -14,14 +14,24 @@ function isUsableSecret(value: string): boolean {
   return value.length >= MIN_SECRET_LENGTH
 }
 
+function explicitEnvSecret(): string {
+  // Nuxt may inject a generated development secret into process.env and mark it
+  // with NUXT_APP_SECRET_GENERATED=1. Prefer our persisted dataRoot secret instead.
+  if (process.env.NUXT_APP_SECRET_GENERATED === '1') {
+    return ''
+  }
+  return process.env.NUXT_APP_SECRET || ''
+}
+
+function persistSecret(secretPath: string, secret: string) {
+  writeFileSync(secretPath, `${secret}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  })
+}
+
 export async function resolveAppSecret(event?: H3Event): Promise<string> {
   if (cachedSecret && isUsableSecret(cachedSecret)) {
-    return cachedSecret
-  }
-
-  const fromEnv = process.env.NUXT_APP_SECRET || ''
-  if (isUsableSecret(fromEnv)) {
-    cachedSecret = fromEnv
     return cachedSecret
   }
 
@@ -38,11 +48,15 @@ export async function resolveAppSecret(event?: H3Event): Promise<string> {
         }
       }
 
+      const fromEnv = explicitEnvSecret()
+      if (isUsableSecret(fromEnv)) {
+        persistSecret(secretPath, fromEnv)
+        cachedSecret = fromEnv
+        return cachedSecret
+      }
+
       const generated = randomBytes(32).toString('base64')
-      writeFileSync(secretPath, `${generated}\n`, {
-        encoding: 'utf8',
-        mode: 0o600,
-      })
+      persistSecret(secretPath, generated)
       cachedSecret = generated
       return cachedSecret
     })().catch((error) => {
