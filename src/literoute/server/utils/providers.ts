@@ -3,12 +3,36 @@ import { join } from 'node:path'
 import type { H3Event } from 'h3'
 import { ensureDataRoot } from './dataRoot'
 import { newId } from './id'
+import {
+  DEFAULT_PROVIDER_KEY_METHOD,
+  isProviderKeyMethod,
+  normalizeProviderKeyMethod,
+  type ProviderKeyMethod,
+} from './providerKeyMethods'
 import { slugify } from './slug'
+
+export type { ProviderKeyMethod } from './providerKeyMethods'
+export {
+  DEFAULT_PROVIDER_KEY_METHOD,
+  PROVIDER_KEY_METHODS,
+  PROVIDER_KEY_METHOD_LABELS,
+} from './providerKeyMethods'
 
 export type ProviderKey = {
   id: string
   key: string
   valid: boolean | null
+  createdAt: string
+}
+
+export type ProviderModel = {
+  id: string
+  /** Provider model id (unique per provider), e.g. gpt-4o */
+  modelId: string
+  enabled: boolean
+  source: 'manual' | 'fetched'
+  lastTestOk: boolean | null
+  testedAt: string | null
   createdAt: string
 }
 
@@ -18,14 +42,20 @@ export type Provider = {
   slug: string
   baseUrl: string
   type: 'openai-compatible'
+  /** How the key list rotates when a key is exhausted. */
+  keyMethod: ProviderKeyMethod
   keys: ProviderKey[]
+  /** Admin catalogue only — never exposed on public /api/v1/models. */
+  models: ProviderModel[]
   createdAt: string
   updatedAt: string
 }
 
-export type ProviderPublic = Omit<Provider, 'keys'> & {
+export type ProviderPublic = Omit<Provider, 'keys' | 'models'> & {
   keyCount: number
   validKeyCount: number
+  modelCount: number
+  enabledModelCount: number
   keys: Array<{
     id: string
     hint: string
@@ -45,7 +75,16 @@ function storePath(event?: H3Event) {
   return join(ensureDataRoot(event), STORE_FILENAME)
 }
 
-function readStore(event?: H3Event): Provider[] {
+function normalizeProvider(raw: Provider): Provider {
+  return {
+    ...raw,
+    keyMethod: normalizeProviderKeyMethod(raw.keyMethod),
+    keys: Array.isArray(raw.keys) ? raw.keys : [],
+    models: Array.isArray(raw.models) ? raw.models : [],
+  }
+}
+
+export function readStore(event?: H3Event): Provider[] {
   const path = storePath(event)
   if (!existsSync(path)) {
     return []
@@ -54,14 +93,14 @@ function readStore(event?: H3Event): Provider[] {
   try {
     const raw = readFileSync(path, 'utf8')
     const parsed = JSON.parse(raw) as Provider[]
-    return Array.isArray(parsed) ? parsed : []
+    return Array.isArray(parsed) ? parsed.map(normalizeProvider) : []
   }
   catch {
     return []
   }
 }
 
-function writeStore(providers: Provider[], event?: H3Event) {
+export function writeStore(providers: Provider[], event?: H3Event) {
   writeFileSync(storePath(event), `${JSON.stringify(providers, null, 2)}\n`, {
     encoding: 'utf8',
     mode: 0o600,
@@ -76,17 +115,21 @@ function keyHint(key: string) {
 }
 
 export function toPublicProvider(provider: Provider): ProviderPublic {
+  const normalized = normalizeProvider(provider)
   return {
-    id: provider.id,
-    name: provider.name,
-    slug: provider.slug,
-    baseUrl: provider.baseUrl,
-    type: provider.type,
-    createdAt: provider.createdAt,
-    updatedAt: provider.updatedAt,
-    keyCount: provider.keys.length,
-    validKeyCount: provider.keys.filter(item => item.valid === true).length,
-    keys: provider.keys.map(item => ({
+    id: normalized.id,
+    name: normalized.name,
+    slug: normalized.slug,
+    baseUrl: normalized.baseUrl,
+    type: normalized.type,
+    keyMethod: normalized.keyMethod,
+    createdAt: normalized.createdAt,
+    updatedAt: normalized.updatedAt,
+    keyCount: normalized.keys.length,
+    validKeyCount: normalized.keys.filter(item => item.valid === true).length,
+    modelCount: normalized.models.length,
+    enabledModelCount: normalized.models.filter(item => item.enabled).length,
+    keys: normalized.keys.map(item => ({
       id: item.id,
       hint: keyHint(item.key),
       valid: item.valid,
@@ -95,7 +138,7 @@ export function toPublicProvider(provider: Provider): ProviderPublic {
   }
 }
 
-function findProviderOrThrow(providers: Provider[], id: string) {
+export function findProviderOrThrow(providers: Provider[], id: string) {
   const provider = providers.find(item => item.id === id)
   if (!provider) {
     throw createError({ statusCode: 404, statusMessage: 'Provider not found' })
@@ -298,7 +341,9 @@ export async function createProvider(
     slug: uniqueSlug(name, providers, input.slug),
     baseUrl,
     type: 'openai-compatible',
+    keyMethod: DEFAULT_PROVIDER_KEY_METHOD,
     keys,
+    models: [],
     createdAt: now,
     updatedAt: now,
   }
@@ -318,6 +363,7 @@ export type UpdateProviderInput = {
   name: string
   slug?: string
   baseUrl: string
+  keyMethod?: ProviderKeyMethod
   keysRaw?: string
   validateKeys?: boolean
 }
@@ -336,6 +382,13 @@ export async function updateProvider(
   }
   assertBaseUrl(baseUrl)
 
+  if (input.keyMethod !== undefined && !isProviderKeyMethod(input.keyMethod)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Unknown key list method',
+    })
+  }
+
   const providers = readStore(event)
   const provider = findProviderOrThrow(providers, id)
   const now = new Date().toISOString()
@@ -343,6 +396,9 @@ export async function updateProvider(
   provider.name = name
   provider.slug = uniqueSlug(name, providers, input.slug, id)
   provider.baseUrl = baseUrl
+  if (input.keyMethod !== undefined) {
+    provider.keyMethod = input.keyMethod
+  }
   provider.updatedAt = now
 
   let acceptedKeyCount = 0
@@ -391,21 +447,3 @@ export function deleteProvider(id: string, event?: H3Event) {
   return { ok: true as const, id: removed.id }
 }
 
-export function deleteProviderKey(
-  providerId: string,
-  keyId: string,
-  event?: H3Event,
-) {
-  const providers = readStore(event)
-  const provider = findProviderOrThrow(providers, providerId)
-  const before = provider.keys.length
-  provider.keys = provider.keys.filter(item => item.id !== keyId)
-
-  if (provider.keys.length === before) {
-    throw createError({ statusCode: 404, statusMessage: 'API key not found' })
-  }
-
-  provider.updatedAt = new Date().toISOString()
-  writeStore(providers, event)
-  return { provider: toPublicProvider(provider) }
-}

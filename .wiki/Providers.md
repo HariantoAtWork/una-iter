@@ -7,8 +7,35 @@ OpenAI-compatible provider registry stored in `dataRoot/providers.json`. Full CR
 - Visiting `/providers` while the list is **empty** opens the add modal automatically.
 - **Add provider** (navbar / empty state) opens create mode.
 - Each row has **edit** (pencil) and **delete** (trash). Destructive actions use an in-app confirm dialog; success/errors use toasts (no `alert` / `confirm`).
-- Key badges show a masked hint and validity colour. The **×** on a badge removes that key only.
-- Edit modal updates name / slug / base URL, optionally **appends** more bulk keys, and lists existing keys for removal.
+- API keys open in a **right drawer** (hidden by default) via the “N keys” button. Each key is a row (id · hint + validity); reorder with **drag** or **up/down**. No delete control there.
+- Models open in a **right drawer** via the “N models” button (see below).
+- Edit modal updates name / slug / base URL / **key list method**, optionally **appends** more bulk keys, and lists existing keys with **×** to remove.
+
+## Models (admin catalogue)
+
+Per-provider model list stored on the provider. **Unique** by `modelId` within a provider.
+
+**Not exposed on public `/api/v1/models`** — admin-only for routing/config later.
+
+Drawer actions:
+
+| Action | Behaviour |
+|--------|-----------|
+| Retrieve from `/models` | `GET {baseUrl}/models` with a provider key; merges new ids (`source: fetched`) |
+| Add in bulk | One model id per line; duplicates skipped (`source: manual`) |
+| Test models | Probes enabled models via a tiny `chat/completions`; failures are tagged **disabled** |
+| Enable toggle | Per-row switch |
+| Filter | All / Enabled / Disabled tabs + search by model id |
+
+## Key list method
+
+Stored as `keyMethod` on each provider. Configurable **only when editing** a provider (new providers default to Roundabout).
+
+| Method | Behaviour |
+|--------|-----------|
+| **Roundabout** (`roundabout`) | Default. When a key is exhausted, that key moves to the **end** of the list. |
+
+More methods can be added later. Exhaustion is applied via `POST /api/providers/:id/keys/:keyId/exhaust` (`exhaustProviderKey`).
 
 ## Form fields
 
@@ -17,6 +44,7 @@ OpenAI-compatible provider registry stored in `dataRoot/providers.json`. Full CR
 | Name | Required |
 | Slug | Auto from name; editable |
 | Base URL | OpenAI-compatible root, e.g. `https://api.openai.com/v1` |
+| Key list method | Edit only. Default Roundabout |
 | Bulk keys | Create: required. Edit: optional append. One entry per line (see below) |
 | Auto-check keys | Optional: `GET {baseUrl}/models` with `Authorization: Bearer …`; only valid keys saved |
 
@@ -34,12 +62,14 @@ cursor@harianto.dev|another-key
 
 ## Public API shape
 
-List/get/update responses **mask** secrets: only a hint like `••••abcd` is returned. Full keys never go to the browser intentionally.
+List/get/update responses **mask** secrets: only a hint like `••••abcd` is returned. Full keys never go to the browser intentionally. `keyMethod`, `modelCount`, and `enabledModelCount` are included; full model rows load from `/api/providers/:id/models`.
 
 ## Server helpers
 
-See `server/utils/providers.ts`:
+See `server/utils/providers.ts`, `providerKeyMethods.ts`, `providerKeyOps.ts`, and `providerModels.ts`:
 
-- `listProviders` / `getProvider` / `createProvider` / `updateProvider` / `deleteProvider` / `deleteProviderKey`
+- `listProviders` / `getProvider` / `createProvider` / `updateProvider` / `deleteProvider`
+- `deleteProviderKey` / `moveProviderKey` / `exhaustProviderKey`
+- `listProviderModels` / `addProviderModelsBulk` / `fetchProviderModels` / `testProviderModels` / `setProviderModelEnabled`
 - `parseBulkKeys()` for bulk paste
 - `toPublicProvider()` for masked responses

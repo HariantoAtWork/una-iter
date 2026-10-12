@@ -19,3 +19,66 @@ export async function validateOpenAiCompatibleKey(
     return false
   }
 }
+
+export async function fetchOpenAiCompatibleModels(
+  baseUrl: string,
+  apiKey: string,
+): Promise<string[]> {
+  const url = `${baseUrl.replace(/\/+$/, '')}/models`
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Accept: 'application/json',
+    },
+    signal: AbortSignal.timeout(20_000),
+  })
+
+  if (!response.ok) {
+    throw createError({
+      statusCode: 502,
+      statusMessage: `Provider /models returned ${response.status}`,
+    })
+  }
+
+  const payload = await response.json() as {
+    data?: Array<{ id?: string }>
+  }
+
+  const ids = (payload.data || [])
+    .map(item => item.id?.trim())
+    .filter((id): id is string => Boolean(id))
+
+  return [...new Set(ids)]
+}
+
+/** Lightweight probe: tiny chat completion. Failures mean the model is not usable. */
+export async function testOpenAiCompatibleModel(
+  baseUrl: string,
+  apiKey: string,
+  modelId: string,
+): Promise<boolean> {
+  const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: modelId,
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'ping' }],
+      }),
+      signal: AbortSignal.timeout(30_000),
+    })
+    return response.ok
+  }
+  catch {
+    return false
+  }
+}

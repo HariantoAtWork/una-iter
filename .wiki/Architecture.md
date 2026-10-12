@@ -31,7 +31,7 @@ literoute/
 |------|---------|
 | `/login` | Sign in (auth layout) |
 | `/` | Overview dashboard |
-| `/providers` | CRUD for OpenAI-compatible providers and keys |
+| `/providers` | CRUD for OpenAI-compatible providers, keys, and admin models |
 
 Global middleware `auth.global.ts` redirects unauthenticated users to `/login` (except `/login` itself).
 
@@ -49,3 +49,10 @@ Global middleware `auth.global.ts` redirects unauthenticated users to `/login` (
 | PATCH | `/api/providers/:id` | Update fields; optional append keys |
 | DELETE | `/api/providers/:id` | Delete provider and all keys |
 | DELETE | `/api/providers/:id/keys/:keyId` | Remove one key |
+| PATCH | `/api/providers/:id/keys/:keyId/move` | Reorder key (`direction`: `up` \| `down`, or `toIndex`) |
+| POST | `/api/providers/:id/keys/:keyId/exhaust` | Apply key-list method (Roundabout → move to end) |
+| GET | `/api/providers/:id/models` | Admin model catalogue (not `/api/v1/models`) |
+| POST | `/api/providers/:id/models` | Bulk-add model ids |
+| POST | `/api/providers/:id/models/fetch` | Retrieve from provider `GET /models` |
+| POST | `/api/providers/:id/models/test` | Test enabled models; disable failures |
+| PATCH | `/api/providers/:id/models/:modelRowId` | Toggle `enabled` |
