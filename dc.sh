@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Local build / multi-arch Hub push via compose files.
+# Local build / multi-arch Hub push / hot-reload dev via compose files.
 #
 # Usage:
 #   ./dc.sh build              # docker compose -f _build.yml build
 #   ./dc.sh push               # docker compose -f _push.yml build --no-cache --push
-#   ./dc.sh build [args...]    # extra args passed through to compose build
-#   ./dc.sh push [args...]
+#   ./dc.sh dev                # docker compose -f _dev.yml up -d --build
+#   ./dc.sh dev:down           # docker compose -f _dev.yml down
+#   ./dc.sh dev:restart        # ./dc.sh dev:down && ./dc.sh dev
+#   ./dc.sh <cmd> [args...]    # extra args passed through
 
 set -euo pipefail
 
@@ -17,8 +19,10 @@ usage() {
 Usage:
   ./dc.sh build              # docker compose -f _build.yml build
   ./dc.sh push               # docker compose -f _push.yml build --no-cache --push
-  ./dc.sh build [args...]    # extra args passed through to compose build
-  ./dc.sh push [args...]
+  ./dc.sh dev                # docker compose -f _dev.yml up -d --build
+  ./dc.sh dev:down           # docker compose -f _dev.yml down
+  ./dc.sh dev:restart        # ./dc.sh dev:down && ./dc.sh dev
+  ./dc.sh <cmd> [args...]    # extra args passed through
 EOF
   exit "${1:-0}"
 }
@@ -33,6 +37,16 @@ case "$cmd" in
     ;;
   push)
     exec docker compose -f _push.yml build --no-cache --push "$@"
+    ;;
+  dev)
+    exec docker compose -f _dev.yml up -d --build "$@"
+    ;;
+  dev:down)
+    exec docker compose -f _dev.yml down "$@"
+    ;;
+  dev:restart)
+    "$0" dev:down "$@"
+    exec "$0" dev "$@"
     ;;
   -h|--help|help)
     usage 0
