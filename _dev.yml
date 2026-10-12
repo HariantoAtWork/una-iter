@@ -11,7 +11,7 @@ services:
     volumes:
       - ./src/literoute:/app
       - literoute-dev-modules:/app/node_modules  # Linux modules inside the container
-      - ./data/literoute:/var/lib/literoute
+      - .data:/var/lib/literoute
     env_file:
       - .env
     environment:
