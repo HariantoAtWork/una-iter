@@ -1,0 +1,13 @@
+services:
+  literoute:
+    image: harianto/literoute:latest
+    container_name: literoute
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data/literoute:/var/lib/literoute
+    environment:
+      - TZ=${TZ:-UTC}
+      - NITRO_HOST=0.0.0.0
+      - NITRO_PORT=3000

@@ -1,0 +1,6 @@
+services:
+  literoute:
+    build:
+      context: src/literoute
+      dockerfile: Dockerfile
+    image: harianto/literoute:latest
