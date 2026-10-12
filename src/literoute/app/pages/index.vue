@@ -1,89 +1,123 @@
 <script setup lang="ts">
-const { user, loggedIn, refresh, logout } = useAuth()
+const { data, status } = await useFetch('/api/overview')
 
-await refresh()
-if (!loggedIn.value) {
-  await navigateTo('/login')
-}
-
-useHead({
-  title: 'Literoute',
-})
-
-async function onLogout() {
-  await logout()
-  await navigateTo('/login')
-}
+useHead({ title: 'Overview · Literoute' })
 </script>
 
 <template>
-  <main class="home">
-    <p class="home__brand">
-      Literoute
-    </p>
-    <h1 class="home__title">
-      Signed in
-    </h1>
-    <p class="home__lead">
-      Welcome, {{ user?.username }}.
-    </p>
-    <button
-      type="button"
-      class="home__logout"
-      @click="onLogout"
-    >
-      Sign out
-    </button>
-  </main>
+  <UDashboardPanel>
+    <template #header>
+      <UDashboardNavbar title="Overview">
+        <template #leading>
+          <UDashboardSidebarToggle />
+        </template>
+      </UDashboardNavbar>
+    </template>
+
+    <template #body>
+      <div class="space-y-6">
+        <div>
+          <h1 class="text-xl font-semibold text-highlighted">
+            Overview
+          </h1>
+          <p class="text-sm text-muted mt-1">
+            Snapshot of OpenAI-compatible providers and API keys.
+          </p>
+        </div>
+
+        <div
+          v-if="status === 'pending'"
+          class="text-sm text-muted"
+        >
+          Loading…
+        </div>
+
+        <div
+          v-else
+          class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+        >
+          <UCard>
+            <p class="text-sm text-muted">
+              Providers
+            </p>
+            <p class="text-3xl font-semibold text-highlighted mt-2">
+              {{ data?.providerCount ?? 0 }}
+            </p>
+          </UCard>
+          <UCard>
+            <p class="text-sm text-muted">
+              API keys
+            </p>
+            <p class="text-3xl font-semibold text-highlighted mt-2">
+              {{ data?.keyCount ?? 0 }}
+            </p>
+          </UCard>
+          <UCard>
+            <p class="text-sm text-muted">
+              Valid keys
+            </p>
+            <p class="text-3xl font-semibold text-highlighted mt-2">
+              {{ data?.validKeyCount ?? 0 }}
+            </p>
+          </UCard>
+          <UCard>
+            <p class="text-sm text-muted">
+              Unchecked keys
+            </p>
+            <p class="text-3xl font-semibold text-highlighted mt-2">
+              {{ data?.uncheckedKeyCount ?? 0 }}
+            </p>
+          </UCard>
+        </div>
+
+        <UCard>
+          <template #header>
+            <div class="flex items-center justify-between gap-3">
+              <h2 class="font-semibold text-highlighted">
+                Providers
+              </h2>
+              <UButton
+                to="/providers"
+                label="Manage providers"
+                icon="i-lucide-arrow-right"
+                trailing
+                size="sm"
+              />
+            </div>
+          </template>
+
+          <div
+            v-if="!data?.providers?.length"
+            class="text-sm text-muted"
+          >
+            No providers yet. Add an OpenAI-compatible provider to get started.
+          </div>
+
+          <ul
+            v-else
+            class="divide-y divide-default"
+          >
+            <li
+              v-for="provider in data.providers"
+              :key="provider.id"
+              class="py-3 flex items-start justify-between gap-4"
+            >
+              <div class="min-w-0">
+                <p class="font-medium text-highlighted truncate">
+                  {{ provider.name }}
+                </p>
+                <p class="text-sm text-muted truncate">
+                  {{ provider.baseUrl }}
+                </p>
+              </div>
+              <div class="text-right shrink-0 text-sm text-muted">
+                <p>{{ provider.keyCount }} keys</p>
+                <p>{{ provider.validKeyCount }} valid</p>
+              </div>
+            </li>
+          </ul>
+        </UCard>
+      </div>
+    </template>
+  </UDashboardPanel>
 </template>
-
-<style scoped>
-.home {
-  --ink: #14231c;
-  --muted: #4d6358;
-  --accent: #0f7a5f;
-  --accent-ink: #f5fff9;
-  --line: color-mix(in oklab, var(--ink) 14%, transparent);
-
-  min-height: 100dvh;
-  display: grid;
-  align-content: start;
-  gap: 0.5rem;
-  padding: 2.5rem 1.5rem;
-  color: var(--ink);
-  background:
-    radial-gradient(900px 420px at 0% 0%, #c8e7d8 0%, transparent 55%),
-    linear-gradient(160deg, #eef4ef 0%, #e7eee8 100%);
-  font-family: 'Source Sans 3', 'Segoe UI', sans-serif;
-}
-
-.home__brand {
-  margin: 0;
-  font-family: 'Fraunces', Georgia, serif;
-  font-size: clamp(2rem, 5vw, 2.6rem);
-  font-weight: 600;
-  letter-spacing: -0.03em;
-}
-
-.home__title {
-  margin: 0.4rem 0 0;
-  font-size: 1.1rem;
-}
-
-.home__lead {
-  margin: 0 0 1.25rem;
-  color: var(--muted);
-}
-
-.home__logout {
-  width: fit-content;
-  border: 1px solid var(--line);
-  border-radius: 0.55rem;
-  padding: 0.7rem 1rem;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-</style>

@@ -15,8 +15,7 @@ function isUsableSecret(value: string): boolean {
 }
 
 function explicitEnvSecret(): string {
-  // Nuxt may inject a generated development secret into process.env and mark it
-  // with NUXT_APP_SECRET_GENERATED=1. Prefer our persisted dataRoot secret instead.
+  // Ignore Nuxt's generated development secret; prefer our persisted dataRoot secret.
   if (process.env.NUXT_APP_SECRET_GENERATED === '1') {
     return ''
   }
@@ -30,6 +29,7 @@ function persistSecret(secretPath: string, secret: string) {
   })
 }
 
+/** Server-only secret used to seal session cookies. */
 export async function resolveAppSecret(event?: H3Event): Promise<string> {
   if (cachedSecret && isUsableSecret(cachedSecret)) {
     return cachedSecret

@@ -5,7 +5,7 @@ services:
     image: oven/bun:canary-alpine
     container_name: literoute-dev
     working_dir: /app
-    command: ["sh", "-c", "bun install --frozen-lockfile && exec bun run dev"]
+    command: ["sh", "-c", "bun install && exec bun run dev"]
     ports:
       - "${PORT:-3000}:3000"
     volumes:

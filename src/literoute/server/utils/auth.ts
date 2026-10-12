@@ -8,6 +8,7 @@ export type AuthSession = {
   }
 }
 
+/** Server-only constant-time compare. */
 export function safeEqual(a: string, b: string): boolean {
   const aBuf = Buffer.from(a)
   const bBuf = Buffer.from(b)
@@ -19,6 +20,12 @@ export function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(aPad, bPad) && aBuf.length === bBuf.length
 }
 
+function cookieSecure(event: H3Event) {
+  return getRequestHeader(event, 'x-forwarded-proto') === 'https'
+    || getRequestURL(event).protocol === 'https:'
+}
+
+/** Sealed session cookie (server crypto via iron). Works on HTTP when request is not HTTPS. */
 export async function useAuthSession(event: H3Event) {
   const password = await resolveAppSecret(event)
 
@@ -28,7 +35,7 @@ export async function useAuthSession(event: H3Event) {
     maxAge: 60 * 60 * 24 * 7,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: cookieSecure(event),
       sameSite: 'lax',
       path: '/',
     },
