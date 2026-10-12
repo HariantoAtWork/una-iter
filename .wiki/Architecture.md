@@ -31,7 +31,7 @@ literoute/
 |------|---------|
 | `/login` | Sign in (auth layout) |
 | `/` | Overview dashboard |
-| `/providers` | Add / list OpenAI-compatible providers |
+| `/providers` | CRUD for OpenAI-compatible providers and keys |
 
 Global middleware `auth.global.ts` redirects unauthenticated users to `/login` (except `/login` itself).
 
@@ -45,3 +45,7 @@ Global middleware `auth.global.ts` redirects unauthenticated users to `/login` (
 | GET | `/api/overview` | Counts + provider summary |
 | GET | `/api/providers` | List (keys masked) |
 | POST | `/api/providers` | Create + bulk keys |
+| GET | `/api/providers/:id` | Single provider (keys masked) |
+| PATCH | `/api/providers/:id` | Update fields; optional append keys |
+| DELETE | `/api/providers/:id` | Delete provider and all keys |
+| DELETE | `/api/providers/:id/keys/:keyId` | Remove one key |

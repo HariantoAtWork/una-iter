@@ -15,6 +15,7 @@ useHead({ title: 'Sign in · Literoute' })
 const state = reactive({
   username: '',
   password: '',
+  rememberMe: true,
 })
 const error = ref('')
 const pending = ref(false)
@@ -23,7 +24,7 @@ async function onSubmit() {
   error.value = ''
   pending.value = true
   try {
-    await login(state.username, state.password)
+    await login(state.username, state.password, state.rememberMe)
     await navigateTo('/')
   }
   catch (err: unknown) {
@@ -93,6 +94,12 @@ async function onSubmit() {
           required
         />
       </UFormField>
+
+      <UCheckbox
+        v-model="state.rememberMe"
+        label="Remember me"
+        description="Keep me signed in on this device for 30 days."
+      />
 
       <UAlert
         v-if="error"

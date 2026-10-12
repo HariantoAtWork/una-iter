@@ -20,7 +20,9 @@ Browser Web Crypto needs a secure context (HTTPS). That is why the frontend must
 
 - Cookie name: `literoute-session` (httpOnly, `sameSite=lax`).
 - `Secure` is set **only** when the request is HTTPS (`x-forwarded-proto` or request URL protocol). Plain HTTP login still works in local/dev.
-- Session payload holds `{ user: { username } }`.
+- Session payload holds `{ user: { username }, rememberMe }`.
+- **Remember me** (default on): persistent cookie for 30 days.
+- Remember me off: browser session cookie (cleared when the browser closes); seal TTL still 24h.
 
 ## Frontend auth
 

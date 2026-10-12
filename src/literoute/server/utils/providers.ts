@@ -95,8 +95,21 @@ export function toPublicProvider(provider: Provider): ProviderPublic {
   }
 }
 
+function findProviderOrThrow(providers: Provider[], id: string) {
+  const provider = providers.find(item => item.id === id)
+  if (!provider) {
+    throw createError({ statusCode: 404, statusMessage: 'Provider not found' })
+  }
+  return provider
+}
+
 export function listProviders(event?: H3Event) {
   return readStore(event).map(toPublicProvider)
+}
+
+export function getProvider(id: string, event?: H3Event) {
+  const provider = findProviderOrThrow(readStore(event), id)
+  return toPublicProvider(provider)
 }
 
 export function getOverview(event?: H3Event) {
@@ -112,12 +125,17 @@ export function getOverview(event?: H3Event) {
   }
 }
 
-function uniqueSlug(name: string, providers: Provider[], preferred?: string) {
+function uniqueSlug(
+  name: string,
+  providers: Provider[],
+  preferred?: string,
+  excludeId?: string,
+) {
   const base = slugify(preferred || name) || 'provider'
   let slug = base
   let index = 2
 
-  while (providers.some(provider => provider.slug === slug)) {
+  while (providers.some(provider => provider.slug === slug && provider.id !== excludeId)) {
     slug = `${base}-${index}`
     index += 1
   }
@@ -125,10 +143,21 @@ function uniqueSlug(name: string, providers: Provider[], preferred?: string) {
   return slug
 }
 
-function existingKeySet(providers: Provider[]) {
+function existingKeySet(providers: Provider[], excludeProviderId?: string) {
   return new Set(
-    providers.flatMap(provider => provider.keys.map(item => item.key)),
+    providers
+      .filter(provider => provider.id !== excludeProviderId)
+      .flatMap(provider => provider.keys.map(item => item.key)),
   )
+}
+
+function assertBaseUrl(baseUrl: string) {
+  if (!baseUrl) {
+    throw createError({ statusCode: 400, statusMessage: 'Base URL is required' })
+  }
+  if (!URL.canParse(baseUrl)) {
+    throw createError({ statusCode: 400, statusMessage: 'Base URL is invalid' })
+  }
 }
 
 /**
@@ -180,49 +209,12 @@ export function parseBulkKeys(
   return { entries, skippedExisting }
 }
 
-export type CreateProviderInput = {
-  name: string
-  slug?: string
-  baseUrl: string
-  keysRaw: string
-  validateKeys?: boolean
-}
-
-export async function createProvider(
-  input: CreateProviderInput,
-  event?: H3Event,
+async function materialiseKeys(
+  entries: ParsedBulkKey[],
+  baseUrl: string,
+  validateKeys: boolean,
+  now: string,
 ) {
-  const name = input.name.trim()
-  const baseUrl = input.baseUrl.trim().replace(/\/+$/, '')
-  const validateKeys = Boolean(input.validateKeys)
-
-  if (!name) {
-    throw createError({ statusCode: 400, statusMessage: 'Name is required' })
-  }
-  if (!baseUrl) {
-    throw createError({ statusCode: 400, statusMessage: 'Base URL is required' })
-  }
-
-  if (!URL.canParse(baseUrl)) {
-    throw createError({ statusCode: 400, statusMessage: 'Base URL is invalid' })
-  }
-
-  const providers = readStore(event)
-  const { entries, skippedExisting } = parseBulkKeys(
-    input.keysRaw,
-    existingKeySet(providers),
-  )
-
-  if (entries.length === 0) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: skippedExisting
-        ? 'All API keys already exist or were empty'
-        : 'At least one API key is required',
-    })
-  }
-
-  const now = new Date().toISOString()
   const keys: ProviderKey[] = []
   let skippedInvalid = 0
 
@@ -243,6 +235,53 @@ export async function createProvider(
       createdAt: now,
     })
   }
+
+  return { keys, skippedInvalid }
+}
+
+export type CreateProviderInput = {
+  name: string
+  slug?: string
+  baseUrl: string
+  keysRaw: string
+  validateKeys?: boolean
+}
+
+export async function createProvider(
+  input: CreateProviderInput,
+  event?: H3Event,
+) {
+  const name = input.name.trim()
+  const baseUrl = input.baseUrl.trim().replace(/\/+$/, '')
+  const validateKeys = Boolean(input.validateKeys)
+
+  if (!name) {
+    throw createError({ statusCode: 400, statusMessage: 'Name is required' })
+  }
+  assertBaseUrl(baseUrl)
+
+  const providers = readStore(event)
+  const { entries, skippedExisting } = parseBulkKeys(
+    input.keysRaw,
+    existingKeySet(providers),
+  )
+
+  if (entries.length === 0) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: skippedExisting
+        ? 'All API keys already exist or were empty'
+        : 'At least one API key is required',
+    })
+  }
+
+  const now = new Date().toISOString()
+  const { keys, skippedInvalid } = await materialiseKeys(
+    entries,
+    baseUrl,
+    validateKeys,
+    now,
+  )
 
   if (keys.length === 0) {
     throw createError({
@@ -273,4 +312,100 @@ export async function createProvider(
     skippedExisting,
     skippedInvalid,
   }
+}
+
+export type UpdateProviderInput = {
+  name: string
+  slug?: string
+  baseUrl: string
+  keysRaw?: string
+  validateKeys?: boolean
+}
+
+export async function updateProvider(
+  id: string,
+  input: UpdateProviderInput,
+  event?: H3Event,
+) {
+  const name = input.name.trim()
+  const baseUrl = input.baseUrl.trim().replace(/\/+$/, '')
+  const validateKeys = Boolean(input.validateKeys)
+
+  if (!name) {
+    throw createError({ statusCode: 400, statusMessage: 'Name is required' })
+  }
+  assertBaseUrl(baseUrl)
+
+  const providers = readStore(event)
+  const provider = findProviderOrThrow(providers, id)
+  const now = new Date().toISOString()
+
+  provider.name = name
+  provider.slug = uniqueSlug(name, providers, input.slug, id)
+  provider.baseUrl = baseUrl
+  provider.updatedAt = now
+
+  let acceptedKeyCount = 0
+  let skippedExisting = 0
+  let skippedInvalid = 0
+
+  const keysRaw = input.keysRaw?.trim() || ''
+  if (keysRaw) {
+    const known = new Set([
+      ...existingKeySet(providers, id),
+      ...provider.keys.map(item => item.key),
+    ])
+    const parsed = parseBulkKeys(keysRaw, known)
+    skippedExisting = parsed.skippedExisting
+
+    const materialised = await materialiseKeys(
+      parsed.entries,
+      baseUrl,
+      validateKeys,
+      now,
+    )
+    skippedInvalid = materialised.skippedInvalid
+    acceptedKeyCount = materialised.keys.length
+    provider.keys.push(...materialised.keys)
+  }
+
+  writeStore(providers, event)
+
+  return {
+    provider: toPublicProvider(provider),
+    acceptedKeyCount,
+    skippedExisting,
+    skippedInvalid,
+  }
+}
+
+export function deleteProvider(id: string, event?: H3Event) {
+  const providers = readStore(event)
+  const index = providers.findIndex(item => item.id === id)
+  if (index === -1) {
+    throw createError({ statusCode: 404, statusMessage: 'Provider not found' })
+  }
+
+  const [removed] = providers.splice(index, 1)
+  writeStore(providers, event)
+  return { ok: true as const, id: removed.id }
+}
+
+export function deleteProviderKey(
+  providerId: string,
+  keyId: string,
+  event?: H3Event,
+) {
+  const providers = readStore(event)
+  const provider = findProviderOrThrow(providers, providerId)
+  const before = provider.keys.length
+  provider.keys = provider.keys.filter(item => item.id !== keyId)
+
+  if (provider.keys.length === before) {
+    throw createError({ statusCode: 404, statusMessage: 'API key not found' })
+  }
+
+  provider.updatedAt = new Date().toISOString()
+  writeStore(providers, event)
+  return { provider: toPublicProvider(provider) }
 }

@@ -1,12 +1,14 @@
 type LoginBody = {
   username?: string
   password?: string
+  rememberMe?: boolean
 }
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<LoginBody>(event)
   const username = body.username?.trim() ?? ''
   const password = body.password ?? ''
+  const rememberMe = body.rememberMe !== false
 
   if (!username || !password) {
     throw createError({
@@ -36,10 +38,11 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const session = await useAuthSession(event)
+  const session = await useAuthSession(event, { rememberMe })
   await session.update({
     user: { username },
+    rememberMe,
   })
 
-  return { ok: true, user: { username } }
+  return { ok: true, user: { username }, rememberMe }
 })

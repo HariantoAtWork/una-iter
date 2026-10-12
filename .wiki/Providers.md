@@ -1,15 +1,23 @@
 # Providers
 
-OpenAI-compatible provider registry stored in `dataRoot/providers.json`.
+OpenAI-compatible provider registry stored in `dataRoot/providers.json`. Full CRUD from `/providers`.
 
-## Create form fields
+## UI
+
+- Visiting `/providers` while the list is **empty** opens the add modal automatically.
+- **Add provider** (navbar / empty state) opens create mode.
+- Each row has **edit** (pencil) and **delete** (trash). Destructive actions use an in-app confirm dialog; success/errors use toasts (no `alert` / `confirm`).
+- Key badges show a masked hint and validity colour. The **×** on a badge removes that key only.
+- Edit modal updates name / slug / base URL, optionally **appends** more bulk keys, and lists existing keys for removal.
+
+## Form fields
 
 | Field | Behaviour |
 |-------|-----------|
 | Name | Required |
-|Slug | Auto from name; editable |
+| Slug | Auto from name; editable |
 | Base URL | OpenAI-compatible root, e.g. `https://api.openai.com/v1` |
-| Bulk keys | One entry per line (see below) |
+| Bulk keys | Create: required. Edit: optional append. One entry per line (see below) |
 | Auto-check keys | Optional: `GET {baseUrl}/models` with `Authorization: Bearer …`; only valid keys saved |
 
 ## Bulk key lines
@@ -26,11 +34,12 @@ cursor@harianto.dev|another-key
 
 ## Public API shape
 
-List/overview responses **mask** secrets: only a hint like `••••abcd` is returned. Full keys never go to the browser intentionally.
+List/get/update responses **mask** secrets: only a hint like `••••abcd` is returned. Full keys never go to the browser intentionally.
 
-## Types (server)
+## Server helpers
 
 See `server/utils/providers.ts`:
 
-- `Provider` / `ProviderKey` with uuid v7 (or supplied) `id`
-- `parseBulkKeys()` / `createProvider()`
+- `listProviders` / `getProvider` / `createProvider` / `updateProvider` / `deleteProvider` / `deleteProviderKey`
+- `parseBulkKeys()` for bulk paste
+- `toPublicProvider()` for masked responses
