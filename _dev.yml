@@ -7,7 +7,7 @@ services:
     working_dir: /app
     command: ["sh", "-c", "bun install --frozen-lockfile && exec bun run dev"]
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:3000"
     volumes:
       - ./src/literoute:/app
       - literoute-dev-modules:/app/node_modules  # Linux modules inside the container
