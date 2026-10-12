@@ -11,11 +11,17 @@ services:
     volumes:
       - ./src/literoute:/app
       - literoute-dev-modules:/app/node_modules  # Linux modules inside the container
+      - ./data/literoute:/var/lib/literoute
+    env_file:
+      - .env
     environment:
       - HOST=0.0.0.0
       - NITRO_HOST=0.0.0.0
       - NITRO_PORT=3000
       - TZ=${TZ:-UTC}
+      - ADMINISTRATOR_PASSWORD=${ADMINISTRATOR_PASSWORD:-}
+      - NUXT_ADMINISTRATOR_PASSWORD=${ADMINISTRATOR_PASSWORD:-}
+      - NUXT_DATA_ROOT=${NUXT_DATA_ROOT:-/var/lib/literoute}
 
 volumes:
   literoute-dev-modules:
