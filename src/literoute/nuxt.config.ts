@@ -12,4 +12,9 @@ export default defineNuxtConfig({
     // Server-only. Override at runtime with NUXT_DATA_ROOT.
     dataRoot: './data',
   },
+  vite: {
+    server: {
+      allowedHosts: true,
+    },
+  },
 })
