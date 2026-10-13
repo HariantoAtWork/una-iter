@@ -1,7 +1,18 @@
+networks:
+  default:
+    name: tsdproxy
+    external: true
+
 services:
   # Hot-reload Nuxt: docker compose -f _dev.yml up -d --build
   # Does not start with plain `docker compose up`.
   literoute-dev:
+    labels:
+      tsdproxy.enable: true
+      tsdproxy.name: literoute-dev
+      tsdproxy.autodetect: true
+      tsdproxy.port.1: "443/https:3000/http"
+      tsdproxy.host.2: "80/http:3000/http"
     image: oven/bun:canary-alpine
     container_name: literoute-dev
     working_dir: /app
