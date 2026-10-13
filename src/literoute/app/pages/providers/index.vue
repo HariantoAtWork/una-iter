@@ -5,6 +5,7 @@ import { apiErrorMessage } from '~/utils/apiError'
 
 type ModalMode = 'create' | 'edit'
 
+const route = useRoute()
 const toast = useToast()
 const confirm = useConfirmDialog()
 const deleting = ref(false)
@@ -31,27 +32,76 @@ const modelsDrawerProvider = computed(() =>
 
 useHead({ title: 'Providers · Literoute' })
 
+function queryProviderId(key: 'keys' | 'models') {
+  const value = route.query[key]
+  return typeof value === 'string' && value ? value : null
+}
+
+function providerExists(id: string | null) {
+  if (!id) {
+    return false
+  }
+  return !!data.value?.providers?.some(provider => provider.id === id)
+}
+
+async function setDrawerQuery(patch: { keys?: string | null, models?: string | null }) {
+  const query = { ...route.query }
+  for (const key of ['keys', 'models'] as const) {
+    if (!(key in patch)) {
+      continue
+    }
+    const value = patch[key]
+    if (value) {
+      query[key] = value
+    }
+    else {
+      delete query[key]
+    }
+  }
+  await navigateTo({ query }, { replace: true })
+}
+
 function openKeysDrawer(provider: ProviderPublic) {
   keysDrawerProviderId.value = provider.id
   keysDrawerOpen.value = true
+  void setDrawerQuery({ keys: provider.id })
 }
 
 function openModelsDrawer(provider: ProviderPublic) {
   modelsDrawerProviderId.value = provider.id
   modelsDrawerOpen.value = true
+  void setDrawerQuery({ models: provider.id })
 }
 
 watch(keysDrawerOpen, (value) => {
   if (!value) {
     keysDrawerProviderId.value = null
+    if (queryProviderId('keys')) {
+      void setDrawerQuery({ keys: null })
+    }
   }
 })
 
 watch(modelsDrawerOpen, (value) => {
   if (!value) {
     modelsDrawerProviderId.value = null
+    if (queryProviderId('models')) {
+      void setDrawerQuery({ models: null })
+    }
   }
 })
+
+const keysFromQuery = queryProviderId('keys')
+if (providerExists(keysFromQuery)) {
+  keysDrawerProviderId.value = keysFromQuery
+  keysDrawerOpen.value = true
+}
+
+const modelsFromQuery = queryProviderId('models')
+if (providerExists(modelsFromQuery)) {
+  modelsDrawerProviderId.value = modelsFromQuery
+  modelsDrawerOpen.value = true
+}
 
 function openCreate() {
   mode.value = 'create'
@@ -87,6 +137,12 @@ async function confirmDeleteProvider(provider: ProviderPublic) {
     if (editingId.value === provider.id) {
       open.value = false
       editingId.value = null
+    }
+    if (keysDrawerProviderId.value === provider.id) {
+      keysDrawerOpen.value = false
+    }
+    if (modelsDrawerProviderId.value === provider.id) {
+      modelsDrawerOpen.value = false
     }
     await refresh()
   }

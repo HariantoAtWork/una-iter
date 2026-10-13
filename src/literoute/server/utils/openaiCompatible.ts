@@ -1,3 +1,14 @@
+function authHeaders(apiKey: string, extra: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...extra,
+  }
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`
+  }
+  return headers
+}
+
 export async function validateOpenAiCompatibleKey(
   baseUrl: string,
   apiKey: string,
@@ -7,10 +18,7 @@ export async function validateOpenAiCompatibleKey(
   try {
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: 'application/json',
-      },
+      headers: authHeaders(apiKey),
       signal: AbortSignal.timeout(12_000),
     })
     return response.ok
@@ -28,10 +36,7 @@ export async function fetchOpenAiCompatibleModels(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      Accept: 'application/json',
-    },
+    headers: authHeaders(apiKey),
     signal: AbortSignal.timeout(20_000),
   })
 
@@ -64,11 +69,7 @@ export async function testOpenAiCompatibleModel(
   try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: authHeaders(apiKey, { 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         model: modelId,
         max_tokens: 1,

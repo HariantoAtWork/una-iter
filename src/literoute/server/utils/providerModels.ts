@@ -36,12 +36,13 @@ function toPublicModel(model: ProviderModel): ProviderModelPublic {
   }
 }
 
+/** Empty string when the provider has no keys (local AI often needs none). */
 function firstUsableKey(provider: Provider) {
   const valid = provider.keys.find(item => item.valid === true)
   if (valid) {
     return valid.key
   }
-  return provider.keys[0]?.key || null
+  return provider.keys[0]?.key || ''
 }
 
 function parseBulkModelIds(raw: string) {
@@ -178,14 +179,6 @@ export async function fetchProviderModels(providerId: string, event?: H3Event) {
   const providers = readStore(event)
   const provider = findProviderOrThrow(providers, providerId)
   const apiKey = firstUsableKey(provider)
-
-  if (!apiKey) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Add at least one API key before fetching models',
-    })
-  }
-
   const remoteIds = await fetchOpenAiCompatibleModels(provider.baseUrl, apiKey)
   const existing = new Set(provider.models.map(item => item.modelId))
   const now = new Date().toISOString()
@@ -248,6 +241,44 @@ export function setProviderModelEnabled(
   }
 }
 
+export function deleteProviderModel(
+  providerId: string,
+  modelRowId: string,
+  event?: H3Event,
+) {
+  const providers = readStore(event)
+  const provider = findProviderOrThrow(providers, providerId)
+  const before = provider.models.length
+  provider.models = provider.models.filter(item => item.id !== modelRowId)
+
+  if (provider.models.length === before) {
+    throw createError({ statusCode: 404, statusMessage: 'Model not found' })
+  }
+
+  provider.updatedAt = new Date().toISOString()
+  writeStore(providers, event)
+
+  return {
+    provider: toPublicProvider(provider),
+    models: provider.models.map(toPublicModel),
+  }
+}
+
+export function clearProviderModels(providerId: string, event?: H3Event) {
+  const providers = readStore(event)
+  const provider = findProviderOrThrow(providers, providerId)
+  const removed = provider.models.length
+  provider.models = []
+  provider.updatedAt = new Date().toISOString()
+  writeStore(providers, event)
+
+  return {
+    provider: toPublicProvider(provider),
+    models: [] as ProviderModelPublic[],
+    removed,
+  }
+}
+
 export async function testProviderModels(
   providerId: string,
   modelRowIds: string[] | undefined,
@@ -257,16 +288,9 @@ export async function testProviderModels(
   const provider = findProviderOrThrow(providers, providerId)
   const apiKey = firstUsableKey(provider)
 
-  if (!apiKey) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Add at least one API key before testing models',
-    })
-  }
-
   const targets = modelRowIds?.length
     ? provider.models.filter(item => modelRowIds.includes(item.id))
-    : provider.models.filter(item => item.enabled)
+    : [...provider.models]
 
   if (targets.length === 0) {
     throw createError({
@@ -278,6 +302,7 @@ export async function testProviderModels(
   const now = new Date().toISOString()
   let passed = 0
   let failed = 0
+  let enabled = 0
   let disabled = 0
 
   for (const model of targets) {
@@ -290,6 +315,10 @@ export async function testProviderModels(
     model.testedAt = now
     if (ok) {
       passed += 1
+      if (!model.enabled) {
+        model.enabled = true
+        enabled += 1
+      }
     }
     else {
       failed += 1
@@ -309,6 +338,7 @@ export async function testProviderModels(
     tested: targets.length,
     passed,
     failed,
+    enabled,
     disabled,
   }
 }

@@ -297,34 +297,32 @@ export async function createProvider(
   assertBaseUrl(baseUrl)
 
   const providers = readStore(event)
+  const keysRaw = input.keysRaw?.trim() || ''
   const { entries, skippedExisting } = parseBulkKeys(
-    input.keysRaw,
+    keysRaw,
     existingKeySet(providers),
   )
 
-  if (entries.length === 0) {
+  // Keys are optional (local OpenAI-compatible servers often need none).
+  // Only reject when the user pasted keys that could not be accepted.
+  if (keysRaw && entries.length === 0) {
     throw createError({
       statusCode: 400,
       statusMessage: skippedExisting
         ? 'All API keys already exist or were empty'
-        : 'At least one API key is required',
+        : 'No valid API keys found',
     })
   }
 
   const now = new Date().toISOString()
-  const { keys, skippedInvalid } = await materialiseKeys(
-    entries,
-    baseUrl,
-    validateKeys,
-    now,
-  )
+  const { keys, skippedInvalid } = entries.length
+    ? await materialiseKeys(entries, baseUrl, validateKeys, now)
+    : { keys: [] as ProviderKey[], skippedInvalid: 0 }
 
-  if (keys.length === 0) {
+  if (keysRaw && keys.length === 0) {
     throw createError({
       statusCode: 400,
-      statusMessage: validateKeys
-        ? 'No valid API keys found'
-        : 'At least one API key is required',
+      statusMessage: 'No valid API keys found',
     })
   }
 

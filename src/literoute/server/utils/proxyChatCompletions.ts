@@ -23,6 +23,17 @@ function isExhaustedStatus(status: number) {
   return status === 429 || status === 402
 }
 
+function upstreamHeaders(apiKey: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  }
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`
+  }
+  return headers
+}
+
 export async function proxyChatCompletions(event: H3Event) {
   const body = await readBody<Record<string, unknown>>(event)
   const publicModelId = typeof body?.model === 'string' ? body.model : ''
@@ -34,8 +45,9 @@ export async function proxyChatCompletions(event: H3Event) {
     })
   }
 
-  let routed = resolveRoutedModel(publicModelId, event)
+  const routed = resolveRoutedModel(publicModelId, event)
   const triedKeyIds = new Set<string>()
+  // Local providers may have zero keys; still allow a single no-auth attempt.
   const maxAttempts = Math.max(1, routed.provider.keys.length)
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -43,18 +55,13 @@ export async function proxyChatCompletions(event: H3Event) {
       ? routed.provider
       : reloadProvider(routed.provider.id, event)
 
-    if (provider.keys.length === 0) {
-      throw createError({
-        statusCode: 503,
-        statusMessage: `Provider "${provider.slug}" has no API keys`,
-      })
+    const key = provider.keys.length === 0 ? null : pickProviderKey(provider)
+    if (key) {
+      if (triedKeyIds.has(key.id)) {
+        break
+      }
+      triedKeyIds.add(key.id)
     }
-
-    const key = pickProviderKey(provider)
-    if (triedKeyIds.has(key.id)) {
-      break
-    }
-    triedKeyIds.add(key.id)
 
     const upstreamBody = {
       ...body,
@@ -66,21 +73,23 @@ export async function proxyChatCompletions(event: H3Event) {
     try {
       response = await fetch(upstreamUrl, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${key.key}`,
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
+        headers: upstreamHeaders(key?.key || ''),
         body: JSON.stringify(upstreamBody),
         signal: AbortSignal.timeout(120_000),
       })
     }
     catch {
-      markKeyExhausted(provider.id, key.id, event)
-      continue
+      if (key) {
+        markKeyExhausted(provider.id, key.id, event)
+        continue
+      }
+      throw createError({
+        statusCode: 502,
+        statusMessage: `Upstream provider "${provider.slug}" is unreachable`,
+      })
     }
 
-    if (isExhaustedStatus(response.status) && attempt < maxAttempts - 1) {
+    if (key && isExhaustedStatus(response.status) && attempt < maxAttempts - 1) {
       markKeyExhausted(provider.id, key.id, event)
       // Drain body so the connection can close cleanly.
       await response.arrayBuffer().catch(() => undefined)

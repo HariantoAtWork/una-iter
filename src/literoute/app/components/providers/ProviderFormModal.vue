@@ -49,7 +49,7 @@ const keyMethodItems = PROVIDER_KEY_METHOD_OPTIONS.map(option => ({
 const modalTitle = computed(() => props.mode === 'create' ? 'Add provider' : 'Edit provider')
 const modalDescription = computed(() =>
   props.mode === 'create'
-    ? 'OpenAI-compatible endpoint with bulk API keys.'
+    ? 'OpenAI-compatible endpoint. API keys are optional for local servers.'
     : 'Update provider details. Optionally append more keys.',
 )
 
@@ -116,7 +116,9 @@ async function onSubmit(_event: FormSubmitEvent<FormState>) {
         },
       })
 
-      const parts = [`Saved ${result.acceptedKeyCount} key(s)`]
+      const parts = result.acceptedKeyCount
+        ? [`Saved ${result.acceptedKeyCount} key(s)`]
+        : ['No API keys (optional for local AI)']
       if (result.skippedExisting) {
         parts.push(`skipped ${result.skippedExisting} existing`)
       }
@@ -258,9 +260,8 @@ async function onSubmit(_event: FormSubmitEvent<FormState>) {
           :label="mode === 'create' ? 'Bulk keys' : 'Add more keys'"
           name="keys"
           :hint="mode === 'create'
-            ? 'One key per line. Optional id: id|key (uuid v7 when omitted)'
+            ? 'Optional. One key per line; id|key when needed. Leave empty for local AI without an API key.'
             : 'Optional. Appends keys; duplicates are skipped.'"
-          :required="mode === 'create'"
         >
           <UTextarea
             v-model="state.keys"
@@ -268,7 +269,6 @@ async function onSubmit(_event: FormSubmitEvent<FormState>) {
             autoresize
             placeholder="sk-key-here&#10;my-id|sk-key-something&#10;cursor@harianto.dev|another-key"
             class="w-full font-mono text-sm"
-            :required="mode === 'create'"
           />
         </UFormField>
 

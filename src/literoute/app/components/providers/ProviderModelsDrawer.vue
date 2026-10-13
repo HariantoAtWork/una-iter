@@ -23,6 +23,9 @@ const fetching = ref(false)
 const testing = ref(false)
 const adding = ref(false)
 const togglingId = ref<string | null>(null)
+const deletingId = ref<string | null>(null)
+const clearing = ref(false)
+const deleteMode = ref(false)
 const search = ref('')
 const statusFilter = ref<ModelStatusFilter>('all')
 const bulkOpen = ref(false)
@@ -66,11 +69,14 @@ watch(
         statusFilter.value = 'all'
         bulkOpen.value = false
         bulkText.value = ''
+        deleteMode.value = false
       }
       return
     }
     await loadModels()
+    statusFilter.value = models.value.some(model => model.enabled) ? 'enabled' : 'all'
   },
+  { immediate: true },
 )
 
 async function loadModels() {
@@ -177,6 +183,7 @@ async function testModels() {
       tested: number
       passed: number
       failed: number
+      enabled: number
       disabled: number
     }>(`/api/providers/${props.provider.id}/models/test`, {
       method: 'POST',
@@ -185,7 +192,7 @@ async function testModels() {
     models.value = result.models
     toast.add({
       title: 'Model test finished',
-      description: `Tested ${result.tested}: ${result.passed} passed, ${result.failed} failed, ${result.disabled} disabled.`,
+      description: `Tested ${result.tested}: ${result.passed} passed (${result.enabled} enabled), ${result.failed} failed (${result.disabled} disabled).`,
       color: result.failed ? 'warning' : 'success',
     })
     emit('refreshed')
@@ -229,14 +236,73 @@ async function toggleEnabled(model: ProviderModelPublic, enabled: boolean) {
   }
 }
 
+async function deleteModel(model: ProviderModelPublic) {
+  if (!props.provider) {
+    return
+  }
+  deletingId.value = model.id
+  try {
+    const result = await $fetch<{ models: ProviderModelPublic[] }>(
+      `/api/providers/${props.provider.id}/models/${model.id}`,
+      { method: 'DELETE' },
+    )
+    models.value = result.models
+    emit('refreshed')
+  }
+  catch (err: unknown) {
+    toast.add({
+      title: 'Could not delete model',
+      description: apiErrorMessage(err),
+      color: 'error',
+    })
+  }
+  finally {
+    deletingId.value = null
+  }
+}
+
+async function removeAllModels() {
+  if (!props.provider) {
+    return
+  }
+  clearing.value = true
+  try {
+    const result = await $fetch<{ models: ProviderModelPublic[]; removed: number }>(
+      `/api/providers/${props.provider.id}/models`,
+      { method: 'DELETE' },
+    )
+    models.value = result.models
+    deleteMode.value = false
+    toast.add({
+      title: 'Models removed',
+      description: `Cleared ${result.removed} model${result.removed === 1 ? '' : 's'}.`,
+      color: 'success',
+    })
+    emit('refreshed')
+  }
+  catch (err: unknown) {
+    toast.add({
+      title: 'Could not remove models',
+      description: apiErrorMessage(err),
+      color: 'error',
+    })
+  }
+  finally {
+    clearing.value = false
+  }
+}
+
 function publicModelId(model: ProviderModelPublic) {
   return props.provider ? `${props.provider.slug}/${model.modelId}` : model.modelId
 }
 
-/** Click-through toast; only the close control receives pointer events. */
+/** Click-through toast; only the close control receives pointer events.
+ * The Toaster merges its own `base` slot (`pointer-events-auto`) onto the same
+ * element as the toast `root`, so the plain utility loses the merge. The
+ * Tailwind v4 important modifier (`!`) is required to win. */
 const copyToastUi = {
-  root: 'pointer-events-none',
-  close: 'pointer-events-auto',
+  root: 'pointer-events-none!',
+  close: 'pointer-events-auto!',
 }
 
 async function copyModelId(model: ProviderModelPublic) {
@@ -301,7 +367,7 @@ async function copyModelId(model: ProviderModelPublic) {
             color="neutral"
             variant="outline"
             :loading="testing"
-            :disabled="loading || fetching || adding || !counts.enabled"
+            :disabled="loading || fetching || adding"
             @click="testModels"
           />
         </div>
@@ -357,10 +423,49 @@ async function copyModelId(model: ProviderModelPublic) {
           />
         </div>
 
-        <p class="text-xs text-muted">
-          Showing {{ filteredModels.length }} of {{ counts.all }}
-          ({{ counts.enabled }} enabled · {{ counts.disabled }} disabled)
-        </p>
+        <div class="flex items-center justify-between gap-2">
+          <p class="text-xs text-muted">
+            Showing {{ filteredModels.length }} of {{ counts.all }}
+            ({{ counts.enabled }} enabled · {{ counts.disabled }} disabled)
+          </p>
+          <div
+            v-if="!deleteMode"
+            class="shrink-0"
+          >
+            <UButton
+              label="Enable delete?"
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              :disabled="loading || !counts.all"
+              @click="deleteMode = true"
+            />
+          </div>
+          <div
+            v-else
+            class="flex items-center gap-0.5 shrink-0 rounded-md border border-default bg-elevated p-0.5"
+          >
+            <UButton
+              label="Remove all"
+              size="xs"
+              color="error"
+              variant="soft"
+              class="bg-red-100! hover:bg-red-200! dark:bg-red-950! dark:hover:bg-red-900!"
+              :loading="clearing"
+              :disabled="loading || !counts.all || !!deletingId"
+              @click="removeAllModels"
+            />
+            <UButton
+              icon="i-lucide-x"
+              size="xs"
+              color="neutral"
+              variant="soft"
+              aria-label="Cancel delete mode"
+              :disabled="clearing || !!deletingId"
+              @click="deleteMode = false"
+            />
+          </div>
+        </div>
 
         <div
           v-if="loading"
@@ -390,21 +495,35 @@ async function copyModelId(model: ProviderModelPublic) {
               </p>
             </div>
             <div class="flex items-center gap-1 shrink-0">
-              <UButton
-                icon="i-lucide-copy"
-                color="neutral"
-                variant="ghost"
-                size="xs"
-                :aria-label="`Copy ${publicModelId(model)}`"
-                @click="copyModelId(model)"
-              />
-              <USwitch
-                :model-value="model.enabled"
-                :loading="togglingId === model.id"
-                size="sm"
-                aria-label="Toggle model enabled"
-                @update:model-value="(value: boolean) => toggleEnabled(model, value)"
-              />
+              <template v-if="deleteMode">
+                <UButton
+                  icon="i-lucide-trash-2"
+                  color="error"
+                  variant="ghost"
+                  size="xs"
+                  :aria-label="`Delete ${publicModelId(model)}`"
+                  :loading="deletingId === model.id"
+                  :disabled="clearing || (!!deletingId && deletingId !== model.id)"
+                  @click="deleteModel(model)"
+                />
+              </template>
+              <template v-else>
+                <UButton
+                  icon="i-lucide-copy"
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  :aria-label="`Copy ${publicModelId(model)}`"
+                  @click="copyModelId(model)"
+                />
+                <USwitch
+                  :model-value="model.enabled"
+                  :loading="togglingId === model.id"
+                  size="sm"
+                  aria-label="Toggle model enabled"
+                  @update:model-value="(value: boolean) => toggleEnabled(model, value)"
+                />
+              </template>
             </div>
           </li>
         </ul>
