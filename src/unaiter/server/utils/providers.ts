@@ -62,6 +62,28 @@ export type ParsedBulkKey = {
   key: string
 }
 
+/** Serializable provider payload used for export/import round-trips. */
+export type ProviderExport = Provider
+
+export type ExportedProviders = {
+  version: number
+  exportedAt: string
+  providers: ProviderExport[]
+}
+
+const EXPORT_VERSION = 1
+
+export type ImportProvidersInput = {
+  providers?: unknown
+  overwrite?: boolean
+}
+
+export type ImportProvidersResult = {
+  imported: number
+  overwritten: number
+  skipped: number
+}
+
 const STORE_FILENAME = 'providers.json'
 
 function storePath(event?: H3Event) {
@@ -436,5 +458,169 @@ export function deleteProvider(id: string, event?: H3Event) {
   const [removed] = providers.splice(index, 1)
   writeStore(providers, event)
   return { ok: true as const, id: removed.id }
+}
+
+/**
+ * Serialise all providers (including secrets) for export.
+ */
+export function exportProviders(event?: H3Event): ExportedProviders {
+  const providers = readStore(event).map(provider => ({
+    id: provider.id,
+    name: provider.name,
+    slug: provider.slug,
+    baseUrl: provider.baseUrl,
+    type: provider.type,
+    keyMethod: provider.keyMethod,
+    keys: provider.keys.map(key => ({ ...key })),
+    models: provider.models.map(model => ({ ...model })),
+    createdAt: provider.createdAt,
+    updatedAt: provider.updatedAt,
+  }))
+
+  return {
+    version: EXPORT_VERSION,
+    exportedAt: new Date().toISOString(),
+    providers,
+  }
+}
+
+/**
+ * Shape-check and normalise arbitrary import JSON into full provider records.
+ * Accepts either an `ExportedProviders` envelope or a bare provider array.
+ */
+export function parseImportPayload(raw: unknown): Provider[] {
+  const list = Array.isArray(raw)
+    ? raw
+    : Array.isArray((raw as ExportedProviders)?.providers)
+      ? (raw as ExportedProviders).providers
+      : null
+
+  if (!list) {
+    throw createError({ statusCode: 400, statusMessage: 'Unrecognised providers file' })
+  }
+
+  const now = new Date().toISOString()
+  const providers: Provider[] = []
+  for (const entry of list) {
+    if (!entry || typeof entry !== 'object') {
+      continue
+    }
+    const provider = entry as Partial<Provider>
+    const name = typeof provider.name === 'string' ? provider.name.trim() : ''
+    const baseUrl = typeof provider.baseUrl === 'string' ? provider.baseUrl.trim() : ''
+    if (!name || !baseUrl || !URL.canParse(baseUrl)) {
+      continue
+    }
+    providers.push(cloneImportedProvider({ ...provider, name, baseUrl }, now))
+  }
+
+  if (!providers.length) {
+    throw createError({ statusCode: 400, statusMessage: 'No importable providers found' })
+  }
+
+  return providers
+}
+
+function cloneImportedProvider(source: Partial<Provider>, now: string): Provider {
+  const keys = Array.isArray(source.keys) ? source.keys : []
+  const models = Array.isArray(source.models) ? source.models : []
+  const id = typeof source.id === 'string' && source.id ? source.id : newId()
+
+  return {
+    id,
+    name: String(source.name ?? '').trim(),
+    slug: String(source.slug ?? '').trim() || slugify(String(source.name ?? '')),
+    baseUrl: String(source.baseUrl ?? '').trim().replace(/\/+$/, ''),
+    type: 'openai-compatible',
+    keyMethod: normalizeProviderKeyMethod(source.keyMethod),
+    keys: keys.map(key => ({
+      id: typeof key?.id === 'string' && key.id ? key.id : newId(),
+      key: String(key?.key ?? ''),
+      valid: typeof key?.valid === 'boolean' ? key.valid : null,
+      createdAt: typeof key?.createdAt === 'string' ? key.createdAt : now,
+    })),
+    models: models.map(model => ({
+      id: typeof model?.id === 'string' && model.id ? model.id : newId(),
+      modelId: String(model?.modelId ?? ''),
+      enabled: model?.enabled !== false,
+      source: model?.source === 'manual' ? 'manual' as const : 'fetched' as const,
+      lastTestOk: typeof model?.lastTestOk === 'boolean' ? model.lastTestOk : null,
+      testedAt: typeof model?.testedAt === 'string' ? model.testedAt : null,
+      createdAt: typeof model?.createdAt === 'string' ? model.createdAt : now,
+    })),
+    createdAt: typeof source.createdAt === 'string' ? source.createdAt : now,
+    updatedAt: now,
+  }
+}
+
+/**
+ * Import selected providers from a previously exported file.
+ *
+ * Providers are matched to existing ones by `slug` then `name`.
+ * - overwrite = true  → replace matched providers entirely.
+ * - overwrite = false → skip matches, only add new ones.
+ */
+export async function importProviders(
+  input: ImportProvidersInput,
+  event?: H3Event,
+): Promise<ImportProvidersResult> {
+  const overwrite = Boolean(input.overwrite)
+  const incoming = Array.isArray(input.providers) ? input.providers : []
+
+  if (!incoming.length) {
+    throw createError({ statusCode: 400, statusMessage: 'No providers selected' })
+  }
+
+  const now = new Date().toISOString()
+  const providers = readStore(event)
+  let imported = 0
+  let overwritten = 0
+  let skipped = 0
+
+  for (const entry of incoming) {
+    if (!entry || typeof entry !== 'object') {
+      continue
+    }
+    const source = entry as Partial<Provider>
+    const name = typeof source.name === 'string' ? source.name.trim() : ''
+    const baseUrl = typeof source.baseUrl === 'string' ? source.baseUrl.trim() : ''
+    if (!name || !baseUrl || !URL.canParse(baseUrl)) {
+      continue
+    }
+
+    const incomingSlug = typeof source.slug === 'string' && source.slug.trim()
+      ? source.slug.trim()
+      : slugify(name)
+
+    const matchIndex = providers.findIndex(provider =>
+      (incomingSlug && provider.slug === incomingSlug) || provider.name === name)
+
+    if (matchIndex !== -1) {
+      if (overwrite) {
+        const replacement = cloneImportedProvider(
+          { ...source, name, baseUrl },
+          now,
+        )
+        replacement.id = providers[matchIndex]!.id
+        replacement.slug = uniqueSlug(name, providers, incomingSlug, replacement.id)
+        providers[matchIndex] = replacement
+        overwritten += 1
+      }
+      else {
+        skipped += 1
+      }
+      continue
+    }
+
+    const created = cloneImportedProvider({ ...source, name, baseUrl }, now)
+    created.id = newId()
+    created.slug = uniqueSlug(name, providers, incomingSlug)
+    providers.push(created)
+    imported += 1
+  }
+
+  writeStore(providers, event)
+
+  return { imported, overwritten, skipped }
 }
 

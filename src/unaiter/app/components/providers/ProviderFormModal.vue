@@ -30,6 +30,13 @@ const emit = defineEmits<{
 const toast = useToast()
 const slugTouched = ref(false)
 const pending = ref(false)
+const probing = ref(false)
+const probeResult = ref<{
+  ok: boolean
+  status: number | null
+  modelCount: number | null
+  error: string | null
+} | null>(null)
 
 const state = reactive<FormState>({
   name: '',
@@ -64,6 +71,10 @@ function toSlug(value: string) {
     .slice(0, 64)
 }
 
+watch(() => state.baseUrl, () => {
+  probeResult.value = null
+})
+
 watch(() => state.name, (name) => {
   if (!slugTouched.value) {
     state.slug = toSlug(name)
@@ -95,6 +106,34 @@ function resetForm() {
   state.keys = ''
   state.validateKeys = true
   slugTouched.value = false
+  probeResult.value = null
+}
+
+async function onProbe() {
+  const baseUrl = state.baseUrl.trim()
+  if (!baseUrl) {
+    toast.add({ title: 'Enter a Base URL first', color: 'warning' })
+    return
+  }
+  probing.value = true
+  probeResult.value = null
+  try {
+    probeResult.value = await $fetch('/api/providers/probe', {
+      method: 'POST',
+      body: { baseUrl },
+    })
+  }
+  catch (err: unknown) {
+    probeResult.value = {
+      ok: false,
+      status: null,
+      modelCount: null,
+      error: apiErrorMessage(err),
+    }
+  }
+  finally {
+    probing.value = false
+  }
 }
 
 async function onSubmit(_event: FormSubmitEvent<FormState>) {
@@ -232,13 +271,35 @@ async function onSubmit(_event: FormSubmitEvent<FormState>) {
           hint="OpenAI-compatible root, e.g. https://api.openai.com/v1"
           required
         >
-          <UInput
-            v-model="state.baseUrl"
-            type="url"
-            placeholder="https://api.openai.com/v1"
-            class="w-full"
-            required
-          />
+          <div class="flex gap-2">
+            <UInput
+              v-model="state.baseUrl"
+              type="url"
+              placeholder="https://api.openai.com/v1"
+              class="w-full"
+              required
+            />
+            <UButton
+              label="Probe"
+              color="neutral"
+              variant="outline"
+              icon="i-lucide-plug"
+              :loading="probing"
+              :disabled="!state.baseUrl.trim()"
+              @click="onProbe"
+            />
+          </div>
+          <p
+            v-if="probeResult"
+            class="mt-1 flex items-center gap-1 text-xs"
+            :class="probeResult.ok ? 'text-success' : 'text-error'"
+          >
+            <UIcon :name="probeResult.ok ? 'i-lucide-circle-check' : 'i-lucide-circle-x'" class="size-3.5" />
+            <span v-if="probeResult.ok">
+              Reachable ({{ probeResult.status }}){{ probeResult.modelCount !== null ? ` · ${probeResult.modelCount} model(s)` : '' }}
+            </span>
+            <span v-else>{{ probeResult.error }}</span>
+          </p>
         </UFormField>
 
         <UFormField

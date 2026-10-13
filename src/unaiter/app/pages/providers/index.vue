@@ -17,6 +17,79 @@ const modelsDrawerProviderId = ref<string | null>(null)
 const mode = ref<ModalMode>('create')
 const editingId = ref<string | null>(null)
 
+type ImportProvider = {
+  name: string
+  slug: string
+  baseUrl: string
+  keyMethod?: string
+  keys?: unknown[]
+  models?: unknown[]
+}
+
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const importModalOpen = ref(false)
+const importItems = ref<ImportProvider[]>([])
+
+async function exportProviders() {
+  try {
+    const data = await $fetch('/api/providers/export')
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `unaiter-providers-${new Date().toISOString().slice(0, 10)}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+    toast.add({ title: 'Providers exported', color: 'success' })
+  }
+  catch (err: unknown) {
+    toast.add({
+      title: 'Export failed',
+      description: apiErrorMessage(err),
+      color: 'error',
+    })
+  }
+}
+
+async function onImportFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) {
+    return
+  }
+
+  try {
+    const parsed = JSON.parse(await file.text())
+    const result = await $fetch<{ providers: ImportProvider[] }>(
+      '/api/providers/import.parse',
+      { method: 'POST', body: parsed },
+    )
+    importItems.value = result.providers
+    importModalOpen.value = true
+  }
+  catch (err: unknown) {
+    toast.add({
+      title: 'Could not read providers file',
+      description: err instanceof SyntaxError ? 'The file is not valid JSON.' : apiErrorMessage(err),
+      color: 'error',
+    })
+  }
+}
+
+const settingsItems = [[
+  {
+    label: 'Import',
+    icon: 'i-lucide-upload',
+    onSelect: () => fileInputRef.value?.click(),
+  },
+  {
+    label: 'Export',
+    icon: 'i-lucide-download',
+    onSelect: () => exportProviders(),
+  },
+]]
+
 const { data, refresh } = await useFetch<{ providers: ProviderPublic[] }>('/api/providers')
 
 const isEmpty = computed(() => !data.value?.providers?.length)
@@ -203,14 +276,32 @@ async function removeKey(provider: ProviderPublic, keyId: string) {
 
     <template #body>
       <div class="space-y-6 max-w-3xl">
-        <div>
-          <h1 class="text-xl font-semibold text-highlighted">
-            Providers
-          </h1>
-          <p class="text-sm text-muted mt-1">
-            Create, edit, and delete OpenAI-compatible providers, keys, and models.
-          </p>
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h1 class="text-xl font-semibold text-highlighted">
+              Providers
+            </h1>
+            <p class="text-sm text-muted mt-1">
+              Create, edit, and delete OpenAI-compatible providers, keys, and models.
+            </p>
+          </div>
+          <UDropdownMenu :items="settingsItems">
+            <UButton
+              icon="i-lucide-settings"
+              color="neutral"
+              variant="ghost"
+              aria-label="Provider settings"
+            />
+          </UDropdownMenu>
         </div>
+
+        <input
+          ref="fileInputRef"
+          type="file"
+          accept="application/json,.json"
+          class="hidden"
+          @change="onImportFileChange"
+        >
 
         <UCard>
           <template #header>
@@ -320,6 +411,12 @@ async function removeKey(provider: ProviderPublic, keyId: string) {
           :editing-provider="editingProvider"
           @saved="refresh()"
           @remove-key="removeKey"
+        />
+
+        <ProvidersProviderImportModal
+          v-model:open="importModalOpen"
+          :items="importItems"
+          @done="refresh()"
         />
       </div>
     </template>

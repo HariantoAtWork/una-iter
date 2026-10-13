@@ -28,6 +28,53 @@ export async function validateOpenAiCompatibleKey(
   }
 }
 
+export type BaseUrlProbeResult = {
+  ok: boolean
+  status: number | null
+  modelCount: number | null
+  error: string | null
+}
+
+/** Probe a base URL for availability without persisting anything. */
+export async function probeOpenAiCompatibleBaseUrl(
+  baseUrl: string,
+  apiKey: string,
+): Promise<BaseUrlProbeResult> {
+  const url = `${baseUrl.replace(/\/+$/, '')}/models`
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: authHeaders(apiKey),
+      signal: AbortSignal.timeout(12_000),
+    })
+
+    let modelCount: number | null = null
+    if (response.ok) {
+      try {
+        const payload = await response.json() as { data?: Array<{ id?: string }> }
+        modelCount = Array.isArray(payload.data) ? payload.data.length : null
+      }
+      catch {
+        modelCount = null
+      }
+    }
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      modelCount,
+      error: response.ok ? null : `Endpoint returned ${response.status}`,
+    }
+  }
+  catch (err) {
+    const message = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')
+      ? 'Request timed out'
+      : 'Could not reach the endpoint'
+    return { ok: false, status: null, modelCount: null, error: message }
+  }
+}
+
 export async function fetchOpenAiCompatibleModels(
   baseUrl: string,
   apiKey: string,
