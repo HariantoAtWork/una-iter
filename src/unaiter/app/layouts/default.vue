@@ -44,7 +44,7 @@ async function onLogout() {
             v-if="!collapsed"
             class="font-semibold text-highlighted truncate"
           >
-            Unaiter
+            Una Iter
           </span>
         </div>
         <UDashboardSidebarCollapse />

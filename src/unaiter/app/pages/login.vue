@@ -10,7 +10,7 @@ if (loggedIn.value) {
   await navigateTo('/')
 }
 
-useHead({ title: 'Sign in · Unaiter' })
+useHead({ title: 'Sign in · Una Iter' })
 
 const state = reactive({
   username: '',
@@ -50,7 +50,7 @@ async function onSubmit() {
             class="size-5 text-primary"
           />
           <p class="font-semibold text-highlighted">
-            Unaiter
+            Una Iter
           </p>
         </div>
         <h1 class="text-lg font-semibold text-highlighted">

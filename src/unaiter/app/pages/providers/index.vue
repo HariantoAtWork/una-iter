@@ -30,7 +30,7 @@ const modelsDrawerProvider = computed(() =>
   data.value?.providers?.find(provider => provider.id === modelsDrawerProviderId.value) || null,
 )
 
-useHead({ title: 'Providers · Unaiter' })
+useHead({ title: 'Providers · Una Iter' })
 
 function queryProviderId(key: 'keys' | 'models') {
   const value = route.query[key]

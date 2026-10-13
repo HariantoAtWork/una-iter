@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const { data, status } = await useFetch('/api/overview')
 
-useHead({ title: 'Overview · Unaiter' })
+useHead({ title: 'Overview · Una Iter' })
 </script>
 
 <template>
