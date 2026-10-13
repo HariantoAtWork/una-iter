@@ -146,6 +146,22 @@ function openModelsDrawer(provider: ProviderPublic) {
   void setDrawerQuery({ models: provider.id })
 }
 
+function providerActionItems(provider: ProviderPublic) {
+  return [[
+    {
+      label: 'Edit',
+      icon: 'i-lucide-pencil',
+      onSelect: () => openEdit(provider),
+    },
+    {
+      label: 'Delete',
+      icon: 'i-lucide-trash-2',
+      color: 'error',
+      onSelect: () => confirmDeleteProvider(provider),
+    },
+  ]]
+}
+
 watch(keysDrawerOpen, (value) => {
   if (!value) {
     keysDrawerProviderId.value = null
@@ -261,9 +277,6 @@ async function removeKey(provider: ProviderPublic, keyId: string) {
   <UDashboardPanel>
     <template #header>
       <UDashboardNavbar title="Providers">
-        <template #leading>
-          <UDashboardSidebarToggle />
-        </template>
         <template #right>
           <UButton
             label="Add provider"
@@ -370,23 +383,15 @@ async function removeKey(provider: ProviderPublic, keyId: string) {
                     trailing-icon="i-lucide-panel-right"
                     @click="openModelsDrawer(provider)"
                   />
-                  <UButton
-                    icon="i-lucide-pencil"
-                    color="neutral"
-                    variant="ghost"
-                    size="sm"
-                    aria-label="Edit provider"
-                    @click="openEdit(provider)"
-                  />
-                  <UButton
-                    icon="i-lucide-trash-2"
-                    color="error"
-                    variant="ghost"
-                    size="sm"
-                    aria-label="Delete provider"
-                    :loading="deleting"
-                    @click="confirmDeleteProvider(provider)"
-                  />
+                  <UDropdownMenu :items="providerActionItems(provider)">
+                    <UButton
+                      icon="i-lucide-ellipsis"
+                      color="neutral"
+                      variant="ghost"
+                      size="sm"
+                      aria-label="Provider actions"
+                    />
+                  </UDropdownMenu>
                 </div>
               </div>
             </li>

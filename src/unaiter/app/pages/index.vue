@@ -7,11 +7,7 @@ useHead({ title: 'Overview · Una Iter' })
 <template>
   <UDashboardPanel>
     <template #header>
-      <UDashboardNavbar title="Overview">
-        <template #leading>
-          <UDashboardSidebarToggle />
-        </template>
-      </UDashboardNavbar>
+      <UDashboardNavbar title="Overview" />
     </template>
 
     <template #body>
