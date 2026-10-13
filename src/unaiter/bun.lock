@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "literoute",
+      "name": "unaiter",
       "dependencies": {
         "@nuxt/ui": "^4.11.3",
         "nuxt": "^4.6.1",

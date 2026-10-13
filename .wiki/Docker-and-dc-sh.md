@@ -14,11 +14,11 @@
 
 - Image: `oven/bun:canary-alpine`
 - Mounts app source + named volume for `node_modules`
-- Data: `.data:/var/lib/literoute`
-- Forces `NUXT_DATA_ROOT=/var/lib/literoute` (do not use host-relative `./data` inside the container)
+- Data: `.data:/var/lib/unaiter`
+- Forces `NUXT_DATA_ROOT=/var/lib/unaiter` (do not use host-relative `./data` inside the container)
 - Host port: `${PORT:-3000}:3000`
 - Install: `bun install` (not frozen) so Linux can refresh the lockfile when deps change on the Mac host
 
 ## Production example
 
-`docker-compose.yml.example` publishes image `harianto/literoute:latest`, mounts `./data/literoute`, sets `NUXT_DATA_ROOT=/var/lib/literoute`.
+`docker-compose.yml.example` publishes image `harianto/unaiter:latest`, mounts `./data/unaiter`, sets `NUXT_DATA_ROOT=/var/lib/unaiter`.

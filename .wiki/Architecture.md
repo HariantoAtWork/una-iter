@@ -3,13 +3,13 @@
 ## Layout
 
 ```text
-literoute/
+unaiter/
   dc.sh                 # build / push / dev lifecycle
   _dev.yml              # hot-reload Nuxt (bun)
   _build.yml / _push.yml
   .env.example
-  .data/                # runtime data (gitignored) → mounted as /var/lib/literoute
-  src/literoute/        # Nuxt 4 app
+  .data/                # runtime data (gitignored) → mounted as /var/lib/unaiter
+  src/unaiter/        # Nuxt 4 app
     app/                # UI only — no crypto
     server/             # Nitro APIs + utils — crypto allowed here
 ```

@@ -3,13 +3,13 @@ networks:
     external: true
 
 services:
-  literoute:
+  unaiter:
     ports: !reset
     networks:
       - tsdproxy
     labels:
       tsdproxy.enable: true
-      tsdproxy.name: literoute
+      tsdproxy.name: unaiter
       tsdproxy.autodetect: true
       tsdproxy.port.1: "443/https:3000/http"
       tsdproxy.port.2: "80/http:3000/http"

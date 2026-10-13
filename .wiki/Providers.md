@@ -26,7 +26,7 @@ POST /v1/chat/completions
 { "model": "ollama-cloud/gemma4:31b", "messages": […] }
 ```
 
-Literoute:
+Unaiter:
 
 1. Splits on the **first** `/` → provider slug + upstream model id  
 2. Checks the model exists and is **enabled**  

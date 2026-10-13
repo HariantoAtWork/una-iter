@@ -10,7 +10,7 @@ if (loggedIn.value) {
   await navigateTo('/')
 }
 
-useHead({ title: 'Sign in · Literoute' })
+useHead({ title: 'Sign in · Unaiter' })
 
 const state = reactive({
   username: '',
@@ -50,7 +50,7 @@ async function onSubmit() {
             class="size-5 text-primary"
           />
           <p class="font-semibold text-highlighted">
-            Literoute
+            Unaiter
           </p>
         </div>
         <h1 class="text-lg font-semibold text-highlighted">

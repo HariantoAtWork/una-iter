@@ -43,7 +43,7 @@ export async function useAuthSession(event: H3Event, options: AuthSessionOptions
   const maxAge = rememberMe ? REMEMBER_ME_MAX_AGE : SESSION_SEAL_MAX_AGE
 
   return useSession<AuthSession>(event, {
-    name: 'literoute-session',
+    name: 'unaiter-session',
     password,
     maxAge,
     cookie: {

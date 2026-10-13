@@ -44,7 +44,7 @@ async function onLogout() {
             v-if="!collapsed"
             class="font-semibold text-highlighted truncate"
           >
-            Literoute
+            Unaiter
           </span>
         </div>
         <UDashboardSidebarCollapse />

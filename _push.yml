@@ -2,11 +2,11 @@
 # Multi-arch cannot be loaded into the local Docker engine, so local
 # `docker:build` stays on _build.yml only.
 services:
-  literoute:
+  unaiter:
     build:
-      context: src/literoute
+      context: src/unaiter
       dockerfile: Dockerfile.platform
       platforms:
         - linux/amd64
         - linux/arm64
-    image: harianto/literoute:latest
+    image: harianto/unaiter:latest

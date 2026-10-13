@@ -1,6 +1,6 @@
-# Literoute wiki
+# Unaiter wiki
 
-Literoute is a Nuxt 4 admin app for managing **OpenAI-compatible providers** and API keys. It runs primarily via Docker Compose (`dc.sh` + `_dev.yml` / production compose examples).
+Unaiter is a Nuxt 4 admin app for managing **OpenAI-compatible providers** and API keys. It runs primarily via Docker Compose (`dc.sh` + `_dev.yml` / production compose examples).
 
 ## Contents
 
@@ -15,8 +15,8 @@ Literoute is a Nuxt 4 admin app for managing **OpenAI-compatible providers** and
 
 ## Hard rule: crypto is server-only
 
-- **Allowed:** `node:crypto` under `src/literoute/server/` (session sealing, timing-safe compares, app secret generation).
-- **Forbidden:** Web Crypto / `crypto.*` / `node:crypto` in `src/literoute/app/` (browser secure-context / HTTPS pain).
+- **Allowed:** `node:crypto` under `src/unaiter/server/` (session sealing, timing-safe compares, app secret generation).
+- **Forbidden:** Web Crypto / `crypto.*` / `node:crypto` in `src/unaiter/app/` (browser secure-context / HTTPS pain).
 - **IDs:** use the `uuid` package (`v7`) via `server/utils/id.ts`, not `crypto.randomUUID()`.
 
 See [Auth and crypto](Auth-and-Crypto.md) and run:

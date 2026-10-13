@@ -4,8 +4,8 @@
 
 | Area | Crypto? | Notes |
 |------|---------|--------|
-| `src/literoute/server/**` | Yes | `node:crypto` for secrets and compares |
-| `src/literoute/app/**` | **No** | No Web Crypto / `node:crypto` / `crypto.randomUUID()` |
+| `src/unaiter/server/**` | Yes | `node:crypto` for secrets and compares |
+| `src/unaiter/app/**` | **No** | No Web Crypto / `node:crypto` / `crypto.randomUUID()` |
 | Entity IDs | `uuid` package | `import { v7 as uuidv7 } from 'uuid'` via `newId()` |
 
 Browser Web Crypto needs a secure context (HTTPS). That is why the frontend must not depend on it. Server-side Node/Bun crypto is fine on HTTP or HTTPS.
@@ -18,7 +18,7 @@ Browser Web Crypto needs a secure context (HTTPS). That is why the frontend must
 
 ## Sessions
 
-- Cookie name: `literoute-session` (httpOnly, `sameSite=lax`).
+- Cookie name: `unaiter-session` (httpOnly, `sameSite=lax`).
 - `Secure` is set **only** when the request is HTTPS (`x-forwarded-proto` or request URL protocol). Plain HTTP login still works in local/dev.
 - Session payload holds `{ user: { username }, rememberMe }`.
 - **Remember me** (default on): persistent cookie for 30 days.

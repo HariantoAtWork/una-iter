@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Docker + Docker Compose
-- Bun (for local work inside `src/literoute` if needed)
+- Bun (for local work inside `src/unaiter` if needed)
 - A `.env` copied from `.env.example`
 
 ```bash

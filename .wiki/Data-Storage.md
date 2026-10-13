@@ -1,6 +1,6 @@
 # Data storage
 
-Runtime files live under **`dataRoot`** (Docker: `/var/lib/literoute` → host `.data/` or `./data/literoute`).
+Runtime files live under **`dataRoot`** (Docker: `/var/lib/unaiter` → host `.data/` or `./data/unaiter`).
 
 | File | Purpose |
 |------|---------|

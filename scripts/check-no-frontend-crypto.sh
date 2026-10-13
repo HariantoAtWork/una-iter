@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP="$ROOT/src/literoute/app"
+APP="$ROOT/src/unaiter/app"
 
 if [[ ! -d "$APP" ]]; then
   echo "Missing app directory: $APP" >&2
@@ -30,4 +30,4 @@ if [[ -n "$matches" ]]; then
   exit 1
 fi
 
-echo "OK: no crypto usage under src/literoute/app/"
+echo "OK: no crypto usage under src/unaiter/app/"

@@ -1,6 +1,6 @@
 services:
-  literoute:
+  unaiter:
     build:
-      context: src/literoute
+      context: src/unaiter
       dockerfile: Dockerfile
-    image: harianto/literoute:latest
+    image: harianto/unaiter:latest
