@@ -11,13 +11,6 @@ import {
 } from './providerKeyMethods'
 import { slugify } from './slug'
 
-export type { ProviderKeyMethod } from './providerKeyMethods'
-export {
-  DEFAULT_PROVIDER_KEY_METHOD,
-  PROVIDER_KEY_METHODS,
-  PROVIDER_KEY_METHOD_LABELS,
-} from './providerKeyMethods'
-
 export type ProviderKey = {
   id: string
   key: string
@@ -45,7 +38,7 @@ export type Provider = {
   /** How the key list rotates when a key is exhausted. */
   keyMethod: ProviderKeyMethod
   keys: ProviderKey[]
-  /** Admin catalogue only — never exposed on public /api/v1/models. */
+  /** Catalogue: enabled entries appear on GET /v1/models. */
   models: ProviderModel[]
   createdAt: string
   updatedAt: string

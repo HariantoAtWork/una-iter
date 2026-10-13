@@ -15,7 +15,24 @@ OpenAI-compatible provider registry stored in `dataRoot/providers.json`. Full CR
 
 Per-provider model list stored on the provider. **Unique** by `modelId` within a provider.
 
-**Not exposed on public `/api/v1/models`** — admin-only for routing/config later.
+**Enabled** models are listed on OpenAI-compatible **`GET /v1/models`** as `{providerSlug}/{modelId}` (e.g. `ollama-cloud/gemma4:31b`). Disabled models stay in the admin catalogue only.
+
+### Routing
+
+Clients must call models with that prefixed id:
+
+```http
+POST /v1/chat/completions
+{ "model": "ollama-cloud/gemma4:31b", "messages": […] }
+```
+
+Literoute:
+
+1. Splits on the **first** `/` → provider slug + upstream model id  
+2. Checks the model exists and is **enabled**  
+3. Picks an API key via the provider’s key method (**Roundabout** = first in the ordered list)  
+4. Forwards to `{baseUrl}/chat/completions` with the **unprefixed** model id  
+5. On **429** / **402** (or network failure), marks that key exhausted (moves to end) and retries with the next key
 
 Drawer actions:
 
@@ -25,6 +42,7 @@ Drawer actions:
 | Add in bulk | One model id per line; duplicates skipped (`source: manual`) |
 | Test models | Probes enabled models via a tiny `chat/completions`; failures are tagged **disabled** |
 | Enable toggle | Per-row switch |
+| Copy | Copies routable id `{providerSlug}/{modelId}` to the clipboard |
 | Filter | All / Enabled / Disabled tabs + search by model id |
 
 ## Key list method

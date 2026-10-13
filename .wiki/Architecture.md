@@ -32,8 +32,10 @@ literoute/
 | `/login` | Sign in (auth layout) |
 | `/` | Overview dashboard |
 | `/providers` | CRUD for OpenAI-compatible providers, keys, and admin models |
+| `/v1/models` | OpenAI-compatible list of **enabled** catalogue models (`{slug}/{modelId}`) |
+| `/v1/chat/completions` | Proxies to the provider resolved from `{slug}/{modelId}` |
 
-Global middleware `auth.global.ts` redirects unauthenticated users to `/login` (except `/login` itself).
+Global middleware `auth.global.ts` redirects unauthenticated users to `/login` (except `/login` and `/v1/*`).
 
 ## API (selected)
 
@@ -51,7 +53,9 @@ Global middleware `auth.global.ts` redirects unauthenticated users to `/login` (
 | DELETE | `/api/providers/:id/keys/:keyId` | Remove one key |
 | PATCH | `/api/providers/:id/keys/:keyId/move` | Reorder key (`direction`: `up` \| `down`, or `toIndex`) |
 | POST | `/api/providers/:id/keys/:keyId/exhaust` | Apply key-list method (Roundabout → move to end) |
-| GET | `/api/providers/:id/models` | Admin model catalogue (not `/api/v1/models`) |
+| GET | `/v1/models` | Public OpenAI-compatible enabled models (`{slug}/{modelId}`) |
+| POST | `/v1/chat/completions` | Route by `{slug}/{modelId}`; Roundabout keys; exhaust on 429/402 |
+| GET | `/api/providers/:id/models` | Admin model catalogue (includes disabled) |
 | POST | `/api/providers/:id/models` | Bulk-add model ids |
 | POST | `/api/providers/:id/models/fetch` | Retrieve from provider `GET /models` |
 | POST | `/api/providers/:id/models/test` | Test enabled models; disable failures |

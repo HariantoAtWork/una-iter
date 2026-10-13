@@ -180,6 +180,7 @@ async function testModels() {
       disabled: number
     }>(`/api/providers/${props.provider.id}/models/test`, {
       method: 'POST',
+      body: {},
     })
     models.value = result.models
     toast.add({
@@ -227,6 +228,39 @@ async function toggleEnabled(model: ProviderModelPublic, enabled: boolean) {
     togglingId.value = null
   }
 }
+
+function publicModelId(model: ProviderModelPublic) {
+  return props.provider ? `${props.provider.slug}/${model.modelId}` : model.modelId
+}
+
+/** Click-through toast; only the close control receives pointer events. */
+const copyToastUi = {
+  root: 'pointer-events-none',
+  close: 'pointer-events-auto',
+}
+
+async function copyModelId(model: ProviderModelPublic) {
+  const value = publicModelId(model)
+  try {
+    await navigator.clipboard.writeText(value)
+    toast.add({
+      title: 'Copied',
+      description: value,
+      color: 'success',
+      ui: copyToastUi,
+      close: { class: 'pointer-events-auto' },
+    })
+  }
+  catch {
+    toast.add({
+      title: 'Could not copy',
+      description: value,
+      color: 'error',
+      ui: copyToastUi,
+      close: { class: 'pointer-events-auto' },
+    })
+  }
+}
 </script>
 
 <template>
@@ -236,7 +270,7 @@ async function toggleEnabled(model: ProviderModelPublic, enabled: boolean) {
     :handle="false"
     :title="provider ? `${provider.name} models` : 'Models'"
     :description="provider
-      ? 'Admin catalogue only — not exposed on /api/v1/models.'
+      ? 'Enabled models appear on GET /v1/models. Disabled stay hidden.'
       : undefined"
     :ui="{ content: 'sm:max-w-lg' }"
   >
@@ -346,7 +380,7 @@ async function toggleEnabled(model: ProviderModelPublic, enabled: boolean) {
           >
             <div class="min-w-0">
               <p class="font-mono text-highlighted truncate">
-                {{ model.modelId }}
+                {{ publicModelId(model) }}
               </p>
               <p class="text-xs text-muted">
                 {{ model.source }}
@@ -355,13 +389,23 @@ async function toggleEnabled(model: ProviderModelPublic, enabled: boolean) {
                 </template>
               </p>
             </div>
-            <USwitch
-              :model-value="model.enabled"
-              :loading="togglingId === model.id"
-              size="sm"
-              aria-label="Toggle model enabled"
-              @update:model-value="(value: boolean) => toggleEnabled(model, value)"
-            />
+            <div class="flex items-center gap-1 shrink-0">
+              <UButton
+                icon="i-lucide-copy"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                :aria-label="`Copy ${publicModelId(model)}`"
+                @click="copyModelId(model)"
+              />
+              <USwitch
+                :model-value="model.enabled"
+                :loading="togglingId === model.id"
+                size="sm"
+                aria-label="Toggle model enabled"
+                @update:model-value="(value: boolean) => toggleEnabled(model, value)"
+              />
+            </div>
           </li>
         </ul>
 

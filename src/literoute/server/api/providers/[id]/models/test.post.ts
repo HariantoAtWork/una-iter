@@ -9,6 +9,6 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Provider id is required' })
   }
 
-  const body = await readBody<Body>(event).catch(() => ({} as Body))
+  const body = (await readBody<Body>(event).catch(() => null)) || {}
   return testProviderModels(id, body.ids, event)
 })

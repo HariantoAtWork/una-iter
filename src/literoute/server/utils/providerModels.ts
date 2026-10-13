@@ -75,6 +75,52 @@ export function listProviderModels(providerId: string, event?: H3Event) {
   }
 }
 
+export type OpenAiModelListItem = {
+  id: string
+  object: 'model'
+  created: number
+  owned_by: string
+}
+
+/** Public model id: `{providerSlug}/{modelId}`. */
+export function publicModelId(providerSlug: string, modelId: string) {
+  return `${providerSlug}/${modelId}`
+}
+
+/** Enabled models across providers for OpenAI-compatible GET /v1/models. */
+export function listEnabledOpenAiModels(event?: H3Event) {
+  const providers = readStore(event)
+  const seen = new Set<string>()
+  const data: OpenAiModelListItem[] = []
+
+  for (const provider of providers) {
+    for (const model of provider.models) {
+      if (!model.enabled) {
+        continue
+      }
+      const id = publicModelId(provider.slug, model.modelId)
+      if (seen.has(id)) {
+        continue
+      }
+      seen.add(id)
+      const createdMs = Date.parse(model.createdAt)
+      data.push({
+        id,
+        object: 'model',
+        created: Number.isFinite(createdMs) ? Math.floor(createdMs / 1000) : 0,
+        owned_by: provider.slug,
+      })
+    }
+  }
+
+  data.sort((a, b) => a.id.localeCompare(b.id))
+
+  return {
+    object: 'list' as const,
+    data,
+  }
+}
+
 export function addProviderModelsBulk(
   providerId: string,
   raw: string,
