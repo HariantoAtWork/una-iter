@@ -25,6 +25,10 @@ function resolveHtml(value: SanitiseValue): string {
 }
 
 export default function sanitizeHtml(el: HTMLElement, binding: DirectiveBinding<SanitiseValue>) {
-  const html = DOMPurify.sanitize(resolveHtml(binding.value))
+  // Keep chat code-block chrome (toolbar buttons + data attrs used for
+  // wrap / line-number toggles and clipboard copy).
+  const html = DOMPurify.sanitize(resolveHtml(binding.value), {
+    ADD_ATTR: ['target', 'aria-pressed'],
+  })
   el.innerHTML = html
 }

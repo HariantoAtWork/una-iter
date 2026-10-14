@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import type { ModelStatusFilter, ProviderModelPublic, ProviderPublic } from '~/types/providers'
-import { marked } from 'marked'
 import { apiErrorMessage } from '~/utils/apiError'
-
-marked.setOptions({ gfm: true, breaks: true })
 
 type ChatRole = 'user' | 'assistant' | 'system'
 
@@ -273,14 +270,6 @@ function clearChat() {
 function toggleReasoning(message: ChatMessage) {
   message.showReasoning = !message.showReasoning
 }
-
-/** Assistant replies are Markdown; user text and model names stay plain. */
-function renderMarkdown(content: string) {
-  const html = marked.parse(content) as string
-  // A table cannot scroll its own overflow, so wrap each one in a container
-  // that scrolls horizontally when the table is wider than the bubble.
-  return html.replace(/<table>[\s\S]*?<\/table>/g, table => `<div class="chat-md-table">${table}</div>`)
-}
 </script>
 
 <template>
@@ -374,17 +363,13 @@ function renderMarkdown(content: string) {
                 </div>
               </div>
 
-              <!-- Partial Markdown parses to broken/empty HTML, so stream as
-                   plain text and render Markdown only after the reply ends. -->
-              <div
+              <!-- Assistant replies render as Markdown (streaming replies stay
+                   plain text inside the component until they finish). -->
+              <ProvidersProviderChatMarkdown
                 v-if="message.role === 'assistant'"
-                :class="isStreamingMessage(index) ? 'whitespace-pre-wrap break-words' : ''"
-              >
-                <div v-if="!isStreamingMessage(index)" class="chat-md" v-sanitize-html="renderMarkdown(message.content)" />
-                <template v-else>
-                  {{ message.content }}<span class="inline-block w-2 animate-pulse">▋</span>
-                </template>
-              </div>
+                :content="message.content"
+                :streaming="isStreamingMessage(index)"
+              />
               <span v-else>{{ message.content }}</span>
             </div>
           </div>
@@ -439,117 +424,3 @@ function renderMarkdown(content: string) {
     </template>
   </UModal>
 </template>
-
-<style scoped>
-/* Styling for `marked` output rendered via v-html, so it needs :deep(). */
-.chat-md :deep(> :first-child) {
-  margin-top: 0;
-}
-
-.chat-md :deep(> :last-child) {
-  margin-bottom: 0;
-}
-
-.chat-md :deep(p),
-.chat-md :deep(ul),
-.chat-md :deep(ol),
-.chat-md :deep(blockquote),
-.chat-md :deep(pre) {
-  margin: 0.5em 0;
-}
-
-.chat-md :deep(ul),
-.chat-md :deep(ol) {
-  padding-left: 1.25rem;
-}
-
-.chat-md :deep(ul) {
-  list-style: disc;
-}
-
-.chat-md :deep(ol) {
-  list-style: decimal;
-}
-
-.chat-md :deep(h1),
-.chat-md :deep(h2),
-.chat-md :deep(h3),
-.chat-md :deep(h4) {
-  margin: 0.75em 0 0.35em;
-  font-weight: 600;
-  line-height: 1.25;
-}
-
-.chat-md :deep(h1) {
-  font-size: 1.15em;
-}
-
-.chat-md :deep(h2) {
-  font-size: 1.1em;
-}
-
-.chat-md :deep(h3),
-.chat-md :deep(h4) {
-  font-size: 1em;
-}
-
-.chat-md :deep(a) {
-  color: var(--ui-primary);
-  text-decoration: underline;
-}
-
-.chat-md :deep(code) {
-  padding: 0.1em 0.3em;
-  border-radius: 0.25rem;
-  background: var(--ui-bg-elevated);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.85em;
-}
-
-.chat-md :deep(pre) {
-  overflow-x: auto;
-  padding: 0.75rem;
-  border-radius: 0.375rem;
-  background: var(--ui-bg-elevated);
-}
-
-.chat-md :deep(pre code) {
-  padding: 0;
-  background: none;
-}
-
-.chat-md :deep(blockquote) {
-  border-left: 3px solid var(--ui-border);
-  padding-left: 0.75rem;
-  color: var(--ui-text-muted);
-}
-
-.chat-md :deep(.chat-md-table) {
-  overflow-x: auto;
-  max-width: 100%;
-  margin: 0.5em 0;
-  border: 1px solid var(--ui-border-accented);
-  border-radius: 0.375rem;
-}
-
-.chat-md :deep(table) {
-  width: max-content;
-  min-width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85em;
-}
-
-.chat-md :deep(th),
-.chat-md :deep(td) {
-  padding: 0.4rem 0.6rem;
-  border: 1px solid var(--ui-border-accented);
-  text-align: left;
-  white-space: nowrap;
-}
-
-.chat-md :deep(th) {
-  /* `bg-elevated` matches the chat bubble, so it vanishes; use `bg-accented`. */
-  background: var(--ui-bg-accented);
-  font-weight: 600;
-}
-</style>
