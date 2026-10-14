@@ -488,11 +488,14 @@ async function copyModelId(model: ProviderModelPublic) {
               <p class="font-mono text-highlighted truncate">
                 {{ publicModelId(model) }}
               </p>
+              <p
+                v-if="model.contextLength"
+                class="text-xs text-muted"
+              >
+                {{ formatContextLength(model.contextLength) }} ctx
+              </p>
               <p class="text-xs text-muted">
                 {{ model.source }}
-                <template v-if="model.contextLength">
-                  · {{ formatContextLength(model.contextLength) }} ctx
-                </template>
                 <template v-if="model.lastTestOk !== null">
                   · last test {{ model.lastTestOk ? 'ok' : 'failed' }}
                 </template>
