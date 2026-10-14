@@ -33,6 +33,88 @@ export type ProviderPublic = {
 
 export type ModelStatusFilter = 'all' | 'enabled' | 'disabled'
 
+export type ProviderModelTestSummary = {
+  tested: number
+  passed: number
+  failed: number
+  enabled: number
+  disabled: number
+  total: number
+}
+
+export type ProviderModelTestJobPublic = {
+  id: number
+  providerId: string
+  status: 'queued' | 'running' | 'completed' | 'cancelled' | 'error'
+  createdAt: string
+  startedAt: string | null
+  finishedAt: string | null
+  total: number
+  tested: number
+  passed: number
+  failed: number
+  enabled: number
+  disabled: number
+  error: string | null
+  cancelRequested: boolean
+}
+
+export type ProviderModelTestQueueSnapshot = {
+  waiting: ProviderModelTestJobPublic[]
+  running: ProviderModelTestJobPublic[]
+  recent: ProviderModelTestJobPublic[]
+}
+
+export type ProviderModelTestStatus = {
+  providerId: string
+  jobId: number | null
+  status: 'idle' | 'queued' | 'running' | 'completed' | 'cancelled' | 'error'
+  total: number
+  tested: number
+  passed: number
+  failed: number
+  enabled: number
+  disabled: number
+  startedAt: string | null
+  finishedAt: string | null
+  error: string | null
+  queue: ProviderModelTestQueueSnapshot
+}
+
+export type ProviderModelTestEvent =
+  | { type: 'queue', queue: ProviderModelTestQueueSnapshot }
+  | {
+    type: 'started'
+    jobId: number
+    providerId: string
+    total: number
+  }
+  | {
+    type: 'result'
+    jobId: number
+    providerId: string
+    model: ProviderModelPublic
+    ok: boolean
+    index: number
+    total: number
+    summary: ProviderModelTestSummary
+  }
+  | {
+    type: 'done'
+    jobId: number
+    providerId: string
+    status: 'completed' | 'cancelled'
+    provider: ProviderPublic
+    models: ProviderModelPublic[]
+    summary: ProviderModelTestSummary
+  }
+  | {
+    type: 'error'
+    jobId: number
+    providerId: string
+    message: string
+  }
+
 export const PROVIDER_KEY_METHOD_OPTIONS: Array<{
   label: string
   value: ProviderKeyMethod

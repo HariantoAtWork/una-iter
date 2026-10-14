@@ -18,10 +18,10 @@ const emit = defineEmits<{
 }>()
 
 const toast = useToast()
+const modelTests = useProviderModelTests()
 const models = ref<ProviderModelPublic[]>([])
 const loading = ref(false)
 const fetching = ref(false)
-const testing = ref(false)
 const adding = ref(false)
 const togglingId = ref<string | null>(null)
 const deletingId = ref<string | null>(null)
@@ -31,12 +31,17 @@ const search = ref('')
 const statusFilter = ref<ModelStatusFilter>('all')
 const bulkOpen = ref(false)
 const bulkText = ref('')
+let stopModelUpdates: (() => void) | null = null
+let stopDone: (() => void) | null = null
 
 const statusItems = [
   { label: 'All', value: 'all' as const },
   { label: 'Enabled', value: 'enabled' as const },
   { label: 'Disabled', value: 'disabled' as const },
 ]
+
+const testing = computed(() => modelTests.isTesting(props.provider?.id))
+const testJob = computed(() => modelTests.jobFor(props.provider?.id))
 
 const filteredModels = computed(() => {
   const query = search.value.trim().toLowerCase()
@@ -60,10 +65,41 @@ const counts = computed(() => ({
   disabled: models.value.filter(item => !item.enabled).length,
 }))
 
+function detachTestListeners() {
+  stopModelUpdates?.()
+  stopDone?.()
+  stopModelUpdates = null
+  stopDone = null
+}
+
+function attachTestListeners(providerId: string) {
+  detachTestListeners()
+  stopModelUpdates = modelTests.onModelsUpdate(providerId, (update) => {
+    if (update.models) {
+      models.value = update.models
+      return
+    }
+    if (!update.model) {
+      return
+    }
+    const index = models.value.findIndex(item => item.id === update.model!.id)
+    if (index === -1) {
+      models.value.push(update.model)
+      return
+    }
+    models.value[index] = update.model
+  })
+  stopDone = modelTests.onDone(providerId, (event) => {
+    models.value = event.models
+    emit('refreshed')
+  })
+}
+
 watch(
   () => [open.value, props.provider?.id] as const,
   async ([isOpen, providerId]) => {
     if (!isOpen || !providerId) {
+      detachTestListeners()
       if (!isOpen) {
         models.value = []
         search.value = ''
@@ -74,11 +110,17 @@ watch(
       }
       return
     }
+    attachTestListeners(providerId)
     await loadModels()
+    await modelTests.refreshStatus(providerId)
     statusFilter.value = models.value.some(model => model.enabled) ? 'enabled' : 'all'
   },
   { immediate: true },
 )
+
+onBeforeUnmount(() => {
+  detachTestListeners()
+})
 
 async function loadModels() {
   if (!props.provider) {
@@ -177,37 +219,14 @@ async function testModels() {
   if (!props.provider) {
     return
   }
-  testing.value = true
-  try {
-    const result = await $fetch<{
-      models: ProviderModelPublic[]
-      tested: number
-      passed: number
-      failed: number
-      enabled: number
-      disabled: number
-    }>(`/api/providers/${props.provider.id}/models/test`, {
-      method: 'POST',
-      body: {},
-    })
-    models.value = result.models
-    toast.add({
-      title: 'Model test finished',
-      description: `Tested ${result.tested}: ${result.passed} passed (${result.enabled} enabled), ${result.failed} failed (${result.disabled} disabled).`,
-      color: result.failed ? 'warning' : 'success',
-    })
-    emit('refreshed')
+  await modelTests.startTest(props.provider.id)
+}
+
+async function cancelTestModels() {
+  if (!props.provider) {
+    return
   }
-  catch (err: unknown) {
-    toast.add({
-      title: 'Could not test models',
-      description: apiErrorMessage(err),
-      color: 'error',
-    })
-  }
-  finally {
-    testing.value = false
-  }
+  await modelTests.cancelTest(props.provider.id, testJob.value.jobId)
 }
 
 async function toggleEnabled(model: ProviderModelPublic, enabled: boolean) {
@@ -362,16 +381,40 @@ async function copyModelId(model: ProviderModelPublic) {
             @click="bulkOpen = !bulkOpen"
           />
           <UButton
+            v-if="!testing"
             label="Test models"
             icon="i-lucide-flask-conical"
             size="sm"
             color="neutral"
             variant="outline"
-            :loading="testing"
-            :disabled="loading || fetching || adding"
+            :disabled="loading || fetching || adding || !counts.all"
             @click="testModels"
           />
+          <UButton
+            v-else
+            label="Cancel test"
+            icon="i-lucide-square"
+            size="sm"
+            color="error"
+            variant="soft"
+            @click="cancelTestModels"
+          />
         </div>
+
+        <p
+          v-if="testing"
+          class="text-xs text-muted"
+        >
+          <template v-if="testJob.status === 'queued'">
+            Job #{{ testJob.jobId }} queued — waiting for this provider’s current test.
+          </template>
+          <template v-else>
+            Job #{{ testJob.jobId }} testing in the background…
+            {{ testJob.tested }}/{{ testJob.total }}
+            ({{ testJob.passed }} passed · {{ testJob.failed }} failed).
+          </template>
+          You can close this drawer and come back.
+        </p>
 
         <div
           v-if="bulkOpen"

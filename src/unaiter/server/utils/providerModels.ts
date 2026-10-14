@@ -1,8 +1,5 @@
 import type { H3Event } from 'h3'
-import {
-  fetchOpenAiCompatibleModels,
-  testOpenAiCompatibleModel,
-} from './openaiCompatible'
+import { fetchOpenAiCompatibleModels } from './openaiCompatible'
 import { newId } from './id'
 import {
   findProviderOrThrow,
@@ -11,7 +8,6 @@ import {
   writeStore,
   type Provider,
   type ProviderModel,
-  type ProviderPublic,
 } from './providers'
 
 export type ProviderModelPublic = {
@@ -25,7 +21,7 @@ export type ProviderModelPublic = {
   createdAt: string
 }
 
-function toPublicModel(model: ProviderModel): ProviderModelPublic {
+export function toPublicModel(model: ProviderModel): ProviderModelPublic {
   return {
     id: model.id,
     modelId: model.modelId,
@@ -296,69 +292,5 @@ export function clearProviderModels(providerId: string, event?: H3Event) {
     provider: toPublicProvider(provider),
     models: [] as ProviderModelPublic[],
     removed,
-  }
-}
-
-export async function testProviderModels(
-  providerId: string,
-  modelRowIds: string[] | undefined,
-  event?: H3Event,
-) {
-  const providers = readStore(event)
-  const provider = findProviderOrThrow(providers, providerId)
-  const apiKey = firstUsableKey(provider)
-
-  const targets = modelRowIds?.length
-    ? provider.models.filter(item => modelRowIds.includes(item.id))
-    : [...provider.models]
-
-  if (targets.length === 0) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'No models to test',
-    })
-  }
-
-  const now = new Date().toISOString()
-  let passed = 0
-  let failed = 0
-  let enabled = 0
-  let disabled = 0
-
-  for (const model of targets) {
-    const ok = await testOpenAiCompatibleModel(
-      provider.baseUrl,
-      apiKey,
-      model.modelId,
-    )
-    model.lastTestOk = ok
-    model.testedAt = now
-    if (ok) {
-      passed += 1
-      if (!model.enabled) {
-        model.enabled = true
-        enabled += 1
-      }
-    }
-    else {
-      failed += 1
-      if (model.enabled) {
-        model.enabled = false
-        disabled += 1
-      }
-    }
-  }
-
-  provider.updatedAt = now
-  writeStore(providers, event)
-
-  return {
-    provider: toPublicProvider(provider) as ProviderPublic,
-    models: provider.models.map(toPublicModel),
-    tested: targets.length,
-    passed,
-    failed,
-    enabled,
-    disabled,
   }
 }

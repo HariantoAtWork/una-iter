@@ -159,8 +159,11 @@ export async function testOpenAiCompatibleModel(
   baseUrl: string,
   apiKey: string,
   modelId: string,
+  signal?: AbortSignal,
 ): Promise<boolean> {
   const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`
+  const timeout = AbortSignal.timeout(30_000)
+  const combined = signal ? AbortSignal.any([timeout, signal]) : timeout
 
   try {
     const response = await fetch(url, {
@@ -171,11 +174,14 @@ export async function testOpenAiCompatibleModel(
         max_tokens: 1,
         messages: [{ role: 'user', content: 'ping' }],
       }),
-      signal: AbortSignal.timeout(30_000),
+      signal: combined,
     })
     return response.ok
   }
-  catch {
+  catch (err) {
+    if (signal?.aborted || (err instanceof Error && err.name === 'AbortError')) {
+      throw err
+    }
     return false
   }
 }
