@@ -14,6 +14,8 @@ const keysDrawerOpen = ref(false)
 const keysDrawerProviderId = ref<string | null>(null)
 const modelsDrawerOpen = ref(false)
 const modelsDrawerProviderId = ref<string | null>(null)
+const chatModalOpen = ref(false)
+const chatProviderId = ref<string | null>(null)
 const mode = ref<ModalMode>('create')
 const editingId = ref<string | null>(null)
 
@@ -102,6 +104,9 @@ const keysDrawerProvider = computed(() =>
 const modelsDrawerProvider = computed(() =>
   data.value?.providers?.find(provider => provider.id === modelsDrawerProviderId.value) || null,
 )
+const chatProvider = computed(() =>
+  data.value?.providers?.find(provider => provider.id === chatProviderId.value) || null,
+)
 
 useHead({ title: 'Providers · Una Iter' })
 
@@ -146,8 +151,18 @@ function openModelsDrawer(provider: ProviderPublic) {
   void setDrawerQuery({ models: provider.id })
 }
 
+function openChat(provider: ProviderPublic) {
+  chatProviderId.value = provider.id
+  chatModalOpen.value = true
+}
+
 function providerActionItems(provider: ProviderPublic) {
   return [[
+    {
+      label: 'Chat',
+      icon: 'i-lucide-message-square',
+      onSelect: () => openChat(provider),
+    },
     {
       label: 'Edit',
       icon: 'i-lucide-pencil',
@@ -408,6 +423,12 @@ async function removeKey(provider: ProviderPublic, keyId: string) {
           v-model:open="modelsDrawerOpen"
           :provider="modelsDrawerProvider"
           @refreshed="refresh()"
+        />
+
+        <ProvidersProviderChatModal
+          v-model:open="chatModalOpen"
+          :provider="chatProvider"
+          @update:open="(value) => { if (!value) chatProviderId = null }"
         />
 
         <ProvidersProviderFormModal
