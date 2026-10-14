@@ -35,19 +35,16 @@ async function onLogout() {
       :ui="{ footer: 'border-t border-default' }"
     >
       <template #header="{ collapsed }">
-        <div class="flex items-center gap-2 min-w-0">
+        <div v-if="!collapsed" class="flex items-center gap-2 min-w-0 flex-1">
           <UIcon
             name="i-lucide-route"
             class="size-5 text-primary shrink-0"
           />
-          <span
-            v-if="!collapsed"
-            class="font-semibold text-highlighted truncate"
-          >
+          <span class="font-semibold text-highlighted truncate">
             Una Iter
           </span>
         </div>
-        <UDashboardSidebarCollapse />
+        <UDashboardSidebarCollapse :class="collapsed ? 'mx-auto' : 'ms-auto'" />
       </template>
 
       <template #default="{ collapsed }">
