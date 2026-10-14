@@ -10,6 +10,10 @@ type ChatRole = 'user' | 'assistant' | 'system'
 type ChatMessage = {
   role: ChatRole
   content: string
+  /** Chain-of-thought streamed separately from the answer, when the model emits it. */
+  reasoning?: string
+  /** Whether the reasoning block is expanded. */
+  showReasoning?: boolean
 }
 
 const open = defineModel<boolean>('open', { required: true })
@@ -227,10 +231,23 @@ async function readStream(body: ReadableStream<Uint8Array>, target: ChatMessage)
         }
         try {
           const parsed = JSON.parse(data) as {
-            choices?: Array<{ delta?: { content?: string }, message?: { content?: string } }>
+            choices?: Array<{
+              delta?: { content?: string, reasoning_content?: string, reasoning?: string }
+              message?: { content?: string, reasoning_content?: string }
+            }>
           }
-          const chunk = parsed.choices?.[0]?.delta?.content
-            ?? parsed.choices?.[0]?.message?.content
+          const delta = parsed.choices?.[0]?.delta
+          const message = parsed.choices?.[0]?.message
+          const chunk = delta?.content ?? message?.content
+          const reasoning = delta?.reasoning_content ?? delta?.reasoning ?? message?.reasoning_content
+          if (reasoning) {
+            live.reasoning = (live.reasoning ?? '') + reasoning
+            // Reveal the chain-of-thought while it streams; still user-collapsible.
+            if (live.showReasoning === undefined) {
+              live.showReasoning = true
+            }
+            void scrollToBottom()
+          }
           if (chunk) {
             live.content += chunk
             void scrollToBottom()
@@ -251,6 +268,10 @@ function stop() {
 function clearChat() {
   abort()
   messages.value = []
+}
+
+function toggleReasoning(message: ChatMessage) {
+  message.showReasoning = !message.showReasoning
 }
 
 /** Assistant replies are Markdown; user text and model names stay plain. */
@@ -324,25 +345,47 @@ function renderMarkdown(content: string) {
           >
             <div
               class="max-w-[85%] rounded-lg px-3 py-2 text-sm"
-              :class="[
-                message.role === 'user'
-                  ? 'bg-primary/10 text-highlighted'
-                  : 'bg-elevated text-default',
-                message.role === 'user' || isStreamingMessage(index)
-                  ? 'whitespace-pre-wrap break-words'
-                  : '',
-              ]"
+              :class="message.role === 'user'
+                ? 'bg-primary/10 text-highlighted whitespace-pre-wrap break-words'
+                : 'bg-elevated text-default'"
             >
+              <!-- Chain-of-thought: only rendered when the model actually emits
+                   it, and always toggleable. -->
+              <div
+                v-if="message.role === 'assistant' && message.reasoning"
+                class="mb-2 border-l-2 border-default pl-2"
+              >
+                <button
+                  type="button"
+                  class="flex items-center gap-1 text-xs text-muted hover:text-default"
+                  @click="toggleReasoning(message)"
+                >
+                  <UIcon
+                    :name="message.showReasoning ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                    class="size-3.5"
+                  />
+                  <span>{{ isStreamingMessage(index) && !message.content ? 'Thinking…' : 'Reasoning' }}</span>
+                </button>
+                <div
+                  v-if="message.showReasoning"
+                  class="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-xs text-muted"
+                >
+                  {{ message.reasoning }}
+                </div>
+              </div>
+
               <!-- Partial Markdown parses to broken/empty HTML, so stream as
                    plain text and render Markdown only after the reply ends. -->
-              <template v-if="message.role === 'assistant' && !isStreamingMessage(index)">
-                <div class="chat-md" v-sanitize-html="renderMarkdown(message.content)" />
-              </template>
+              <div
+                v-if="message.role === 'assistant'"
+                :class="isStreamingMessage(index) ? 'whitespace-pre-wrap break-words' : ''"
+              >
+                <div v-if="!isStreamingMessage(index)" class="chat-md" v-sanitize-html="renderMarkdown(message.content)" />
+                <template v-else>
+                  {{ message.content }}<span class="inline-block w-2 animate-pulse">▋</span>
+                </template>
+              </div>
               <span v-else>{{ message.content }}</span>
-              <span
-                v-if="isStreamingMessage(index)"
-                class="inline-block w-2 animate-pulse"
-              >▋</span>
             </div>
           </div>
         </div>
