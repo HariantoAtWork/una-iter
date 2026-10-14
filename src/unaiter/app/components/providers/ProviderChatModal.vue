@@ -60,11 +60,12 @@ const canSend = computed(() =>
   !!selectedModel.value && !!prompt.value.trim() && !sending.value,
 )
 
-const lastAssistantStreaming = computed(() =>
-  sending.value && messages.value.at(-1)?.role === 'assistant',
-)
-
-watch(
+/** Only the last assistant message is ever mid-stream; render Markdown once done. */
+function isStreamingMessage(index: number) {
+  return sending.value
+    && messages.value.at(-1)?.role === 'assistant'
+    && index === messages.value.length - 1
+}watch(
   () => [open.value, props.provider?.id] as const,
   async ([isOpen, providerId]) => {
     if (!isOpen) {
@@ -254,7 +255,10 @@ function clearChat() {
 
 /** Assistant replies are Markdown; user text and model names stay plain. */
 function renderMarkdown(content: string) {
-  return marked.parse(content) as string
+  const html = marked.parse(content) as string
+  // A table cannot scroll its own overflow, so wrap each one in a container
+  // that scrolls horizontally when the table is wider than the bubble.
+  return html.replace(/<table>[\s\S]*?<\/table>/g, table => `<div class="chat-md-table">${table}</div>`)
 }
 </script>
 
@@ -320,14 +324,23 @@ function renderMarkdown(content: string) {
           >
             <div
               class="max-w-[85%] rounded-lg px-3 py-2 text-sm"
-              :class="message.role === 'user'
-                ? 'bg-primary/10 text-highlighted whitespace-pre-wrap'
-                : 'bg-elevated text-default'"
+              :class="[
+                message.role === 'user'
+                  ? 'bg-primary/10 text-highlighted'
+                  : 'bg-elevated text-default',
+                message.role === 'user' || isStreamingMessage(index)
+                  ? 'whitespace-pre-wrap break-words'
+                  : '',
+              ]"
             >
-              <div v-if="message.role === 'assistant'" class="chat-md" v-html="renderMarkdown(message.content)" />
+              <!-- Partial Markdown parses to broken/empty HTML, so stream as
+                   plain text and render Markdown only after the reply ends. -->
+              <template v-if="message.role === 'assistant' && !isStreamingMessage(index)">
+                <div class="chat-md" v-sanitize-html="renderMarkdown(message.content)" />
+              </template>
               <span v-else>{{ message.content }}</span>
               <span
-                v-if="message.role === 'assistant' && lastAssistantStreaming && index === messages.length - 1"
+                v-if="isStreamingMessage(index)"
                 class="inline-block w-2 animate-pulse"
               >▋</span>
             </div>
@@ -398,8 +411,7 @@ function renderMarkdown(content: string) {
 .chat-md :deep(ul),
 .chat-md :deep(ol),
 .chat-md :deep(blockquote),
-.chat-md :deep(pre),
-.chat-md :deep(table) {
+.chat-md :deep(pre) {
   margin: 0.5em 0;
 }
 
@@ -469,15 +481,32 @@ function renderMarkdown(content: string) {
   color: var(--ui-text-muted);
 }
 
+.chat-md :deep(.chat-md-table) {
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 0.5em 0;
+  border: 1px solid var(--ui-border-accented);
+  border-radius: 0.375rem;
+}
+
 .chat-md :deep(table) {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
+  font-size: 0.85em;
 }
 
 .chat-md :deep(th),
 .chat-md :deep(td) {
-  border: 1px solid var(--ui-border);
-  padding: 0.35rem 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--ui-border-accented);
   text-align: left;
+  white-space: nowrap;
+}
+
+.chat-md :deep(th) {
+  /* `bg-elevated` matches the chat bubble, so it vanishes; use `bg-accented`. */
+  background: var(--ui-bg-accented);
+  font-weight: 600;
 }
 </style>
