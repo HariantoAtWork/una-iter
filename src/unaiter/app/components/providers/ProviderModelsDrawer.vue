@@ -5,6 +5,7 @@ import type {
   ProviderPublic,
 } from '~/types/providers'
 import { apiErrorMessage } from '~/utils/apiError'
+import { formatContextLength } from '~/utils/formatContextLength'
 
 const open = defineModel<boolean>('open', { required: true })
 
@@ -489,6 +490,9 @@ async function copyModelId(model: ProviderModelPublic) {
               </p>
               <p class="text-xs text-muted">
                 {{ model.source }}
+                <template v-if="model.contextLength">
+                  · {{ formatContextLength(model.contextLength) }} ctx
+                </template>
                 <template v-if="model.lastTestOk !== null">
                   · last test {{ model.lastTestOk ? 'ok' : 'failed' }}
                 </template>

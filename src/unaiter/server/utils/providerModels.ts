@@ -17,6 +17,7 @@ import {
 export type ProviderModelPublic = {
   id: string
   modelId: string
+  contextLength: number | null
   enabled: boolean
   source: 'manual' | 'fetched'
   lastTestOk: boolean | null
@@ -28,6 +29,9 @@ function toPublicModel(model: ProviderModel): ProviderModelPublic {
   return {
     id: model.id,
     modelId: model.modelId,
+    contextLength: typeof model.contextLength === 'number' && model.contextLength > 0
+      ? model.contextLength
+      : null,
     enabled: model.enabled,
     source: model.source,
     lastTestOk: model.lastTestOk,
@@ -81,6 +85,8 @@ export type OpenAiModelListItem = {
   object: 'model'
   created: number
   owned_by: string
+  /** Provider's own /models fields are copied through, so extra keys are expected. */
+  [key: string]: unknown
 }
 
 /** Public model id: `{providerSlug}/{modelId}`. */
@@ -88,7 +94,9 @@ export function publicModelId(providerSlug: string, modelId: string) {
   return `${providerSlug}/${modelId}`
 }
 
-/** Enabled models across providers for OpenAI-compatible GET /v1/models. */
+/** Enabled models across providers for OpenAI-compatible GET /v1/models.
+ * Whatever the provider advertised in its `/models` entry is copied through;
+ * `id`, `object` and `owned_by` stay under our control so routing keeps working. */
 export function listEnabledOpenAiModels(event?: H3Event) {
   const providers = readStore(event)
   const seen = new Set<string>()
@@ -106,6 +114,7 @@ export function listEnabledOpenAiModels(event?: H3Event) {
       seen.add(id)
       const createdMs = Date.parse(model.createdAt)
       data.push({
+        ...(model.providerMeta ?? {}),
         id,
         object: 'model',
         created: Number.isFinite(createdMs) ? Math.floor(createdMs / 1000) : 0,
@@ -179,21 +188,32 @@ export async function fetchProviderModels(providerId: string, event?: H3Event) {
   const providers = readStore(event)
   const provider = findProviderOrThrow(providers, providerId)
   const apiKey = firstUsableKey(provider)
-  const remoteIds = await fetchOpenAiCompatibleModels(provider.baseUrl, apiKey)
-  const existing = new Set(provider.models.map(item => item.modelId))
+  const remoteModels = await fetchOpenAiCompatibleModels(provider.baseUrl, apiKey)
+  const existing = new Map(provider.models.map(item => [item.modelId, item]))
   const now = new Date().toISOString()
   let added = 0
   let skippedExisting = 0
+  let dirty = false
 
-  for (const modelId of remoteIds) {
-    if (existing.has(modelId)) {
+  for (const remote of remoteModels) {
+    const current = existing.get(remote.id)
+    if (current) {
       skippedExisting += 1
+      if (remote.contextLength != null && current.contextLength !== remote.contextLength) {
+        current.contextLength = remote.contextLength
+        dirty = true
+      }
+      if (JSON.stringify(current.providerMeta ?? null) !== JSON.stringify(remote.raw)) {
+        current.providerMeta = remote.raw
+        dirty = true
+      }
       continue
     }
-    existing.add(modelId)
     provider.models.push({
       id: newId(),
-      modelId,
+      modelId: remote.id,
+      contextLength: remote.contextLength,
+      providerMeta: remote.raw,
       enabled: true,
       source: 'fetched',
       lastTestOk: null,
@@ -203,7 +223,7 @@ export async function fetchProviderModels(providerId: string, event?: H3Event) {
     added += 1
   }
 
-  if (added > 0) {
+  if (added > 0 || dirty) {
     provider.updatedAt = now
     writeStore(providers, event)
   }
@@ -211,7 +231,7 @@ export async function fetchProviderModels(providerId: string, event?: H3Event) {
   return {
     provider: toPublicProvider(provider),
     models: provider.models.map(toPublicModel),
-    fetched: remoteIds.length,
+    fetched: remoteModels.length,
     added,
     skippedExisting,
   }

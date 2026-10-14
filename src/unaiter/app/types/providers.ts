@@ -10,6 +10,7 @@ export type ProviderKeyPublic = {
 export type ProviderModelPublic = {
   id: string
   modelId: string
+  contextLength: number | null
   enabled: boolean
   source: 'manual' | 'fetched'
   lastTestOk: boolean | null

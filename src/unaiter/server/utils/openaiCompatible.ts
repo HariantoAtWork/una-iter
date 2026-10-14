@@ -75,10 +75,51 @@ export async function probeOpenAiCompatibleBaseUrl(
   }
 }
 
+export type FetchedModel = {
+  id: string
+  /** Context window in tokens when the provider advertises one. */
+  contextLength: number | null
+  /** Raw /models entry, passed through so no provider field is lost. */
+  raw: Record<string, unknown>
+}
+
+/** Preferred key names, checked before a heuristic scan of the entry. */
+const CONTEXT_LENGTH_KEYS = [
+  'context_length',
+  'max_context_length',
+  'context_size',
+  'context_window',
+  'max_model_len',
+  'max_position_embeddings',
+] as const
+
+/** Key names that plausibly mean "context window" on any provider. */
+const CONTEXT_KEY_PATTERN = /(?:context|model)[_-]?(?:len|length|size|window)/i
+
+function isPositiveTokenCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+}
+
+/** Best-effort context length from OpenAI-compatible /models entries
+ * (OpenRouter, Together, vLLM, …): known keys first, then any context-ish numeric field. */
+function parseContextLength(entry: Record<string, unknown>): number | null {
+  for (const key of CONTEXT_LENGTH_KEYS) {
+    if (isPositiveTokenCount(entry[key])) {
+      return entry[key]
+    }
+  }
+  for (const [key, value] of Object.entries(entry)) {
+    if (CONTEXT_KEY_PATTERN.test(key) && isPositiveTokenCount(value)) {
+      return value
+    }
+  }
+  return null
+}
+
 export async function fetchOpenAiCompatibleModels(
   baseUrl: string,
   apiKey: string,
-): Promise<string[]> {
+): Promise<FetchedModel[]> {
   const url = `${baseUrl.replace(/\/+$/, '')}/models`
 
   const response = await fetch(url, {
@@ -95,14 +136,22 @@ export async function fetchOpenAiCompatibleModels(
   }
 
   const payload = await response.json() as {
-    data?: Array<{ id?: string }>
+    data?: Array<Record<string, unknown>>
   }
 
-  const ids = (payload.data || [])
-    .map(item => item.id?.trim())
-    .filter((id): id is string => Boolean(id))
+  const seen = new Set<string>()
+  const models: FetchedModel[] = []
 
-  return [...new Set(ids)]
+  for (const item of payload.data || []) {
+    const id = typeof item?.id === 'string' ? item.id.trim() : ''
+    if (!id || seen.has(id)) {
+      continue
+    }
+    seen.add(id)
+    models.push({ id, contextLength: parseContextLength(item), raw: item })
+  }
+
+  return models
 }
 
 /** Lightweight probe: tiny chat completion. Failures mean the model is not usable. */

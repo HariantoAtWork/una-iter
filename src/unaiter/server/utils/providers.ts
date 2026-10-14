@@ -22,6 +22,10 @@ export type ProviderModel = {
   id: string
   /** Provider model id (unique per provider), e.g. gpt-4o */
   modelId: string
+  /** Context window in tokens when the provider advertises one. */
+  contextLength?: number | null
+  /** Raw provider `/models` entry, kept verbatim (not exposed on the API). */
+  providerMeta?: Record<string, unknown>
   enabled: boolean
   source: 'manual' | 'fetched'
   lastTestOk: boolean | null
@@ -127,6 +131,10 @@ function keyHint(key: string) {
     return '••••'
   }
   return `••••${key.slice(-4)}`
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 export function toPublicProvider(provider: Provider): ProviderPublic {
@@ -542,6 +550,10 @@ function cloneImportedProvider(source: Partial<Provider>, now: string): Provider
     models: models.map(model => ({
       id: typeof model?.id === 'string' && model.id ? model.id : newId(),
       modelId: String(model?.modelId ?? ''),
+      contextLength: typeof model?.contextLength === 'number' && model.contextLength > 0
+        ? model.contextLength
+        : null,
+      providerMeta: isPlainObject(model?.providerMeta) ? model.providerMeta : undefined,
       enabled: model?.enabled !== false,
       source: model?.source === 'manual' ? 'manual' as const : 'fetched' as const,
       lastTestOk: typeof model?.lastTestOk === 'boolean' ? model.lastTestOk : null,
