@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import type { ProviderModelPublic, ProviderPublic } from '~/types/providers'
+import type { ModelStatusFilter, ProviderModelPublic, ProviderPublic } from '~/types/providers'
+import { marked } from 'marked'
 import { apiErrorMessage } from '~/utils/apiError'
+
+marked.setOptions({ gfm: true, breaks: true })
 
 type ChatRole = 'user' | 'assistant' | 'system'
 
@@ -18,6 +21,7 @@ const props = defineProps<{
 const models = ref<ProviderModelPublic[]>([])
 const loadingModels = ref(false)
 const selectedModel = ref<string | null>(null)
+const statusFilter = ref<ModelStatusFilter>('all')
 const messages = ref<ChatMessage[]>([])
 const prompt = ref('')
 const sending = ref(false)
@@ -26,8 +30,26 @@ const toast = useToast()
 const controller = ref<AbortController | null>(null)
 const scrollRef = ref<HTMLElement | null>(null)
 
+const statusItems = [
+  { label: 'All', value: 'all' as const },
+  { label: 'Enabled', value: 'enabled' as const },
+  { label: 'Disabled', value: 'disabled' as const },
+]
+
+const filteredModels = computed(() =>
+  models.value.filter((model) => {
+    if (statusFilter.value === 'enabled') {
+      return model.enabled
+    }
+    if (statusFilter.value === 'disabled') {
+      return !model.enabled
+    }
+    return true
+  }),
+)
+
 const modelItems = computed(() =>
-  models.value.map(model => ({
+  filteredModels.value.map(model => ({
     label: model.modelId,
     value: model.modelId,
   })),
@@ -51,6 +73,7 @@ watch(
       prompt.value = ''
       models.value = []
       selectedModel.value = null
+      statusFilter.value = 'all'
       return
     }
     if (providerId) {
@@ -65,9 +88,20 @@ watch(
   () => scrollToBottom(),
 )
 
+// When the filter hides the current selection, move to the first visible model.
+watch(statusFilter, () => {
+  const visible = filteredModels.value
+  if (visible.some(model => model.modelId === selectedModel.value)) {
+    return
+  }
+  const first = visible[0]
+  selectedModel.value = first ? first.modelId : null
+})
+
 async function loadModels(providerId: string) {
   loadingModels.value = true
   selectedModel.value = null
+  statusFilter.value = 'all'
   models.value = []
   try {
     const result = await $fetch<{ models: ProviderModelPublic[] }>(
@@ -76,6 +110,7 @@ async function loadModels(providerId: string) {
     // Enabled models first so the auto-select lands on a usable model.
     const sorted = [...result.models].sort((a, b) => Number(b.enabled) - Number(a.enabled))
     models.value = sorted
+    statusFilter.value = sorted.some(model => model.enabled) ? 'enabled' : 'all'
     const first = sorted[0]
     if (first) {
       selectedModel.value = first.modelId
@@ -216,6 +251,11 @@ function clearChat() {
   abort()
   messages.value = []
 }
+
+/** Assistant replies are Markdown; user text and model names stay plain. */
+function renderMarkdown(content: string) {
+  return marked.parse(content) as string
+}
 </script>
 
 <template>
@@ -240,8 +280,18 @@ function clearChat() {
           No models available for this provider. Add or enable models first.
         </p>
 
+        <UTabs
+          v-if="hasModels"
+          v-model="statusFilter"
+          :items="statusItems"
+          :content="false"
+          size="sm"
+          color="neutral"
+          :ui="{ root: 'w-full', list: 'w-full', trigger: 'flex-1 justify-center' }"
+        />
+
         <USelect
-          v-else
+          v-if="hasModels"
           v-model="selectedModel"
           :items="modelItems"
           value-key="value"
@@ -269,12 +319,13 @@ function clearChat() {
             :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
           >
             <div
-              class="max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm"
+              class="max-w-[85%] rounded-lg px-3 py-2 text-sm"
               :class="message.role === 'user'
-                ? 'bg-primary/10 text-highlighted'
+                ? 'bg-primary/10 text-highlighted whitespace-pre-wrap'
                 : 'bg-elevated text-default'"
             >
-              <span>{{ message.content }}</span>
+              <div v-if="message.role === 'assistant'" class="chat-md" v-html="renderMarkdown(message.content)" />
+              <span v-else>{{ message.content }}</span>
               <span
                 v-if="message.role === 'assistant' && lastAssistantStreaming && index === messages.length - 1"
                 class="inline-block w-2 animate-pulse"
@@ -332,3 +383,101 @@ function clearChat() {
     </template>
   </UModal>
 </template>
+
+<style scoped>
+/* Styling for `marked` output rendered via v-html, so it needs :deep(). */
+.chat-md :deep(> :first-child) {
+  margin-top: 0;
+}
+
+.chat-md :deep(> :last-child) {
+  margin-bottom: 0;
+}
+
+.chat-md :deep(p),
+.chat-md :deep(ul),
+.chat-md :deep(ol),
+.chat-md :deep(blockquote),
+.chat-md :deep(pre),
+.chat-md :deep(table) {
+  margin: 0.5em 0;
+}
+
+.chat-md :deep(ul),
+.chat-md :deep(ol) {
+  padding-left: 1.25rem;
+}
+
+.chat-md :deep(ul) {
+  list-style: disc;
+}
+
+.chat-md :deep(ol) {
+  list-style: decimal;
+}
+
+.chat-md :deep(h1),
+.chat-md :deep(h2),
+.chat-md :deep(h3),
+.chat-md :deep(h4) {
+  margin: 0.75em 0 0.35em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.chat-md :deep(h1) {
+  font-size: 1.15em;
+}
+
+.chat-md :deep(h2) {
+  font-size: 1.1em;
+}
+
+.chat-md :deep(h3),
+.chat-md :deep(h4) {
+  font-size: 1em;
+}
+
+.chat-md :deep(a) {
+  color: var(--ui-primary);
+  text-decoration: underline;
+}
+
+.chat-md :deep(code) {
+  padding: 0.1em 0.3em;
+  border-radius: 0.25rem;
+  background: var(--ui-bg-elevated);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+}
+
+.chat-md :deep(pre) {
+  overflow-x: auto;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  background: var(--ui-bg-elevated);
+}
+
+.chat-md :deep(pre code) {
+  padding: 0;
+  background: none;
+}
+
+.chat-md :deep(blockquote) {
+  border-left: 3px solid var(--ui-border);
+  padding-left: 0.75rem;
+  color: var(--ui-text-muted);
+}
+
+.chat-md :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.chat-md :deep(th),
+.chat-md :deep(td) {
+  border: 1px solid var(--ui-border);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+</style>
