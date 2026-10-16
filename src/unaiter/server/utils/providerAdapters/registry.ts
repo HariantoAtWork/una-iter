@@ -1,4 +1,5 @@
 import { defaultAdapter, DEFAULT_ADAPTER_ID } from './default'
+import { opencodeAdapter } from './opencode'
 import type {
   AdapterPublic,
   ProviderAdapter,
@@ -10,6 +11,11 @@ const adapters = new Map<string, ProviderAdapter>()
 export function registerAdapter(adapter: ProviderAdapter) {
   adapters.set(adapter.id, adapter)
 }
+
+// Register here so Nitro auto-imports from this file still see a filled catalogue
+// (duplicated barrel exports from index.ts are ignored in favour of this module).
+registerAdapter(defaultAdapter)
+registerAdapter(opencodeAdapter)
 
 export function getAdapter(id: string): ProviderAdapter | undefined {
   return adapters.get(id)

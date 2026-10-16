@@ -1,9 +1,4 @@
-import { defaultAdapter } from './default'
-import { opencodeAdapter } from './opencode'
-import { registerAdapter } from './registry'
-
-registerAdapter(defaultAdapter)
-registerAdapter(opencodeAdapter)
+// Adapters register in registry.ts (Nitro may auto-import that file instead of this barrel).
 
 export { DEFAULT_ADAPTER_ID, defaultAdapter } from './default'
 export {

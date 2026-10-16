@@ -58,10 +58,11 @@ const state = reactive<FormState>({
   validateKeys: true,
 })
 
-const { data: adapterCatalogue } = useAsyncData(
+const { data: adapterCatalogue, refresh: refreshAdapters } = useAsyncData(
   'provider-adapters',
   () => $fetch<ProviderAdapterPublic[]>('/api/provider-adapters'),
-  { default: () => [] },
+  // Auth cookie is client-only; SSR would 401 and cache an empty list.
+  { server: false, immediate: false, default: () => [] },
 )
 
 const adapterItems = computed(() =>
@@ -133,11 +134,13 @@ watch(() => state.name, (name) => {
   }
 })
 
-watch(open, (isOpen) => {
+watch(open, async (isOpen) => {
   if (!isOpen) {
     resetForm()
     return
   }
+
+  await refreshAdapters()
 
   if (props.mode === 'edit' && props.editingProvider) {
     state.name = props.editingProvider.name
