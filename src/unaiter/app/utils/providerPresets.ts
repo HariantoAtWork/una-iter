@@ -3,6 +3,8 @@ export type ProviderPreset = {
   name: string
   /** OpenAI-compatible base URL, including API version path where needed. */
   baseUrl: string
+  /** Server adapter to attach (e.g. opencode). Defaults to OpenAI-compatible. */
+  adapterId?: string
   /** Where to create an API key. Omitted for local runtimes. */
   keyUrl?: string
   /** Local runtime needs no API key. */
@@ -167,6 +169,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
     name: 'OpenCode',
     baseUrl: 'https://opencode.ai/inference/v1',
+    adapterId: 'opencode',
     keyUrl: 'https://opencode.ai/console/keys',
     keyOptional: true,
     keyPlaceholder: 'Leave empty for free models (uses public). Or paste an oc_sk_… key.',

@@ -1,12 +1,5 @@
 import type { H3Event } from 'h3'
-import {
-  applyOpenCodeFreeTierBody,
-  aggregateOpenAiChatStream,
-  isOpenCodeBaseUrl,
-  openCodeUpstreamHeaders,
-  resolveOpenCodeApiKey,
-  resolveOpenCodeBaseUrl,
-} from './opencodeFingerprint'
+import { resolveAdapter } from './providerAdapters'
 import {
   markKeyExhausted,
   pickProviderKey,
@@ -31,24 +24,6 @@ function isExhaustedStatus(status: number) {
   return status === 429 || status === 402
 }
 
-function upstreamHeaders(
-  apiKey: string,
-  baseUrl: string,
-  modelId = '',
-): Record<string, string> {
-  if (isOpenCodeBaseUrl(baseUrl)) {
-    return openCodeUpstreamHeaders(resolveOpenCodeApiKey(apiKey, modelId))
-  }
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-    'Content-Type': 'application/json',
-  }
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`
-  }
-  return headers
-}
-
 export async function proxyChatCompletions(event: H3Event) {
   const body = await readBody<Record<string, unknown>>(event)
   const publicModelId = typeof body?.model === 'string' ? body.model : ''
@@ -64,7 +39,10 @@ export async function proxyChatCompletions(event: H3Event) {
   const triedKeyIds = new Set<string>()
   // Local providers may have zero keys; still allow a single no-auth attempt.
   const maxAttempts = Math.max(1, routed.provider.keys.length)
-  const openCode = isOpenCodeBaseUrl(routed.provider.baseUrl)
+  const adapter = resolveAdapter({
+    adapterId: routed.provider.adapterId,
+    baseUrl: routed.provider.baseUrl,
+  })
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const provider = attempt === 0
@@ -83,20 +61,19 @@ export async function proxyChatCompletions(event: H3Event) {
       ...body,
       model: routed.upstreamModelId,
     }
-    let forcedStream = false
-    if (openCode) {
-      const patched = applyOpenCodeFreeTierBody(upstreamBody)
-      upstreamBody = patched.body
-      forcedStream = patched.forcedStream
-    }
+    const patched = adapter.prepareChatBody(upstreamBody)
+    upstreamBody = patched.body
+    const forcedStream = patched.forcedStream
 
-    const baseUrl = resolveOpenCodeBaseUrl(provider.baseUrl)
+    const baseUrl = adapter.resolveBaseUrl(provider.baseUrl)
     const upstreamUrl = `${baseUrl}/chat/completions`
     let response: Response
     try {
       response = await fetch(upstreamUrl, {
         method: 'POST',
-        headers: upstreamHeaders(key?.key || '', provider.baseUrl, routed.upstreamModelId),
+        headers: adapter.upstreamHeaders(key?.key || '', {
+          modelId: routed.upstreamModelId,
+        }),
         body: JSON.stringify(upstreamBody),
         signal: AbortSignal.timeout(120_000),
       })
@@ -119,9 +96,8 @@ export async function proxyChatCompletions(event: H3Event) {
       continue
     }
 
-    // OpenCode free tier requires stream:true; re-aggregate when the client asked for JSON.
-    if (openCode && forcedStream && response.ok && response.body) {
-      const aggregated = await aggregateOpenAiChatStream(response)
+    const aggregated = await adapter.finalizeChatResponse(response, { forcedStream })
+    if (aggregated) {
       setResponseStatus(event, aggregated.status)
       setHeader(event, 'Content-Type', 'application/json')
       return aggregated.payload

@@ -1,43 +1,30 @@
-import {
-  applyOpenCodeFreeTierBody,
-  isOpenCodeBaseUrl,
-  openCodeUpstreamHeaders,
-  resolveOpenCodeApiKey,
-  resolveOpenCodeBaseUrl,
-} from './opencodeFingerprint'
+import { resolveAdapter } from './providerAdapters'
 
-function authHeaders(
-  apiKey: string,
-  baseUrl: string,
-  extra: Record<string, string> = {},
-): Record<string, string> {
-  if (isOpenCodeBaseUrl(baseUrl)) {
-    return { ...openCodeUpstreamHeaders(apiKey), ...extra }
-  }
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-    ...extra,
-  }
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`
-  }
-  return headers
+export type AdapterAwareOptions = {
+  adapterId?: string | null
 }
 
-function modelsUrl(baseUrl: string) {
-  return `${resolveOpenCodeBaseUrl(baseUrl)}/models`
+function resolveFor(baseUrl: string, options?: AdapterAwareOptions) {
+  return resolveAdapter({ adapterId: options?.adapterId, baseUrl })
+}
+
+function modelsUrl(baseUrl: string, options?: AdapterAwareOptions) {
+  const adapter = resolveFor(baseUrl, options)
+  return `${adapter.resolveBaseUrl(baseUrl)}/models`
 }
 
 export async function validateOpenAiCompatibleKey(
   baseUrl: string,
   apiKey: string,
+  options?: AdapterAwareOptions,
 ): Promise<boolean> {
-  const url = modelsUrl(baseUrl)
+  const adapter = resolveFor(baseUrl, options)
+  const url = modelsUrl(baseUrl, options)
 
   try {
     const response = await fetch(url, {
       method: 'GET',
-      headers: authHeaders(apiKey, baseUrl),
+      headers: adapter.upstreamHeaders(apiKey),
       signal: AbortSignal.timeout(12_000),
     })
     return response.ok
@@ -58,13 +45,15 @@ export type BaseUrlProbeResult = {
 export async function probeOpenAiCompatibleBaseUrl(
   baseUrl: string,
   apiKey: string,
+  options?: AdapterAwareOptions,
 ): Promise<BaseUrlProbeResult> {
-  const url = modelsUrl(baseUrl)
+  const adapter = resolveFor(baseUrl, options)
+  const url = modelsUrl(baseUrl, options)
 
   try {
     const response = await fetch(url, {
       method: 'GET',
-      headers: authHeaders(apiKey, baseUrl),
+      headers: adapter.upstreamHeaders(apiKey),
       signal: AbortSignal.timeout(12_000),
     })
 
@@ -138,12 +127,14 @@ function parseContextLength(entry: Record<string, unknown>): number | null {
 export async function fetchOpenAiCompatibleModels(
   baseUrl: string,
   apiKey: string,
+  options?: AdapterAwareOptions,
 ): Promise<FetchedModel[]> {
-  const url = modelsUrl(baseUrl)
+  const adapter = resolveFor(baseUrl, options)
+  const url = modelsUrl(baseUrl, options)
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: authHeaders(apiKey, baseUrl),
+    headers: adapter.upstreamHeaders(apiKey),
     signal: AbortSignal.timeout(20_000),
   })
 
@@ -179,8 +170,10 @@ export async function testOpenAiCompatibleModel(
   apiKey: string,
   modelId: string,
   signal?: AbortSignal,
+  options?: AdapterAwareOptions,
 ): Promise<boolean> {
-  const url = `${resolveOpenCodeBaseUrl(baseUrl)}/chat/completions`
+  const adapter = resolveFor(baseUrl, options)
+  const url = `${adapter.resolveBaseUrl(baseUrl)}/chat/completions`
   const timeout = AbortSignal.timeout(30_000)
   const combined = signal ? AbortSignal.any([timeout, signal]) : timeout
 
@@ -190,15 +183,11 @@ export async function testOpenAiCompatibleModel(
       max_tokens: 1,
       messages: [{ role: 'user', content: 'ping' }],
     }
-    const openCode = isOpenCodeBaseUrl(baseUrl)
-    const body = openCode
-      ? applyOpenCodeFreeTierBody(baseBody).body
-      : baseBody
-    // Console keys are often read-only; free models need Bearer public (same as chat proxy).
-    const key = openCode ? resolveOpenCodeApiKey(apiKey, modelId) : apiKey
+    const { body } = adapter.prepareChatBody(baseBody)
+    const key = adapter.resolveApiKey(apiKey, modelId)
     const response = await fetch(url, {
       method: 'POST',
-      headers: authHeaders(key, baseUrl, { 'Content-Type': 'application/json' }),
+      headers: adapter.upstreamHeaders(key, { modelId }),
       body: JSON.stringify(body),
       signal: combined,
     })

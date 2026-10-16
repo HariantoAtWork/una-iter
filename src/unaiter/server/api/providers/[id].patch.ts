@@ -2,6 +2,7 @@ type Body = {
   name?: string
   slug?: string
   baseUrl?: string
+  adapterId?: string
   keyMethod?: 'roundabout'
   keys?: string
   validateKeys?: boolean
@@ -20,6 +21,7 @@ export default defineEventHandler(async (event) => {
     name: body.name || '',
     slug: body.slug,
     baseUrl: body.baseUrl || '',
+    adapterId: body.adapterId,
     keyMethod: body.keyMethod,
     keysRaw: body.keys,
     validateKeys: body.validateKeys,

@@ -4,6 +4,10 @@ import type { H3Event } from 'h3'
 import { ensureDataRoot } from './dataRoot'
 import { newId } from './id'
 import {
+  isKnownAdapterId,
+  normalizeAdapterId,
+} from './providerAdapters'
+import {
   DEFAULT_PROVIDER_KEY_METHOD,
   isProviderKeyMethod,
   normalizeProviderKeyMethod,
@@ -39,6 +43,8 @@ export type Provider = {
   slug: string
   baseUrl: string
   type: 'openai-compatible'
+  /** Server adapter id (e.g. default, opencode). */
+  adapterId: string
   /** How the key list rotates when a key is exhausted. */
   keyMethod: ProviderKeyMethod
   keys: ProviderKey[]
@@ -97,10 +103,30 @@ function storePath(event?: H3Event) {
 function normalizeProvider(raw: Provider): Provider {
   return {
     ...raw,
+    adapterId: normalizeAdapterId(raw.adapterId, raw.baseUrl),
     keyMethod: normalizeProviderKeyMethod(raw.keyMethod),
     keys: Array.isArray(raw.keys) ? raw.keys : [],
     models: Array.isArray(raw.models) ? raw.models : [],
   }
+}
+
+function assertAdapterId(adapterId: string) {
+  if (!isKnownAdapterId(adapterId)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Unknown adapter "${adapterId}"`,
+    })
+  }
+}
+
+/** Explicit id must be registered; empty/missing falls back to URL hint then default. */
+function resolveInputAdapterId(adapterId: unknown, baseUrl: string): string {
+  if (typeof adapterId === 'string' && adapterId.trim()) {
+    const id = adapterId.trim()
+    assertAdapterId(id)
+    return id
+  }
+  return normalizeAdapterId(undefined, baseUrl)
 }
 
 export function readStore(event?: H3Event): Provider[] {
@@ -145,6 +171,7 @@ export function toPublicProvider(provider: Provider): ProviderPublic {
     slug: normalized.slug,
     baseUrl: normalized.baseUrl,
     type: normalized.type,
+    adapterId: normalized.adapterId,
     keyMethod: normalized.keyMethod,
     createdAt: normalized.createdAt,
     updatedAt: normalized.updatedAt,
@@ -280,6 +307,7 @@ async function materialiseKeys(
   baseUrl: string,
   validateKeys: boolean,
   now: string,
+  adapterId?: string,
 ) {
   const keys: ProviderKey[] = []
   let skippedInvalid = 0
@@ -287,7 +315,7 @@ async function materialiseKeys(
   for (const entry of entries) {
     let valid: boolean | null = null
     if (validateKeys) {
-      valid = await validateOpenAiCompatibleKey(baseUrl, entry.key)
+      valid = await validateOpenAiCompatibleKey(baseUrl, entry.key, { adapterId })
       if (!valid) {
         skippedInvalid += 1
         continue
@@ -309,6 +337,7 @@ export type CreateProviderInput = {
   name: string
   slug?: string
   baseUrl: string
+  adapterId?: string
   keysRaw: string
   validateKeys?: boolean
 }
@@ -320,11 +349,11 @@ export async function createProvider(
   const name = input.name.trim()
   const baseUrl = input.baseUrl.trim().replace(/\/+$/, '')
   const validateKeys = Boolean(input.validateKeys)
-
   if (!name) {
     throw createError({ statusCode: 400, statusMessage: 'Name is required' })
   }
   assertBaseUrl(baseUrl)
+  const adapterId = resolveInputAdapterId(input.adapterId, baseUrl)
 
   const providers = readStore(event)
   const keysRaw = input.keysRaw?.trim() || ''
@@ -346,7 +375,7 @@ export async function createProvider(
 
   const now = new Date().toISOString()
   const { keys, skippedInvalid } = entries.length
-    ? await materialiseKeys(entries, baseUrl, validateKeys, now)
+    ? await materialiseKeys(entries, baseUrl, validateKeys, now, adapterId)
     : { keys: [] as ProviderKey[], skippedInvalid: 0 }
 
   if (keysRaw && keys.length === 0) {
@@ -362,6 +391,7 @@ export async function createProvider(
     slug: uniqueSlug(name, providers, input.slug),
     baseUrl,
     type: 'openai-compatible',
+    adapterId,
     keyMethod: DEFAULT_PROVIDER_KEY_METHOD,
     keys,
     models: [],
@@ -384,6 +414,7 @@ export type UpdateProviderInput = {
   name: string
   slug?: string
   baseUrl: string
+  adapterId?: string
   keyMethod?: ProviderKeyMethod
   keysRaw?: string
   validateKeys?: boolean
@@ -414,9 +445,15 @@ export async function updateProvider(
   const provider = findProviderOrThrow(providers, id)
   const now = new Date().toISOString()
 
+  // When adapterId omitted on update, keep the existing one (still migrate/normalise).
+  const nextAdapterId = input.adapterId !== undefined
+    ? resolveInputAdapterId(input.adapterId, baseUrl)
+    : normalizeAdapterId(provider.adapterId, baseUrl)
+
   provider.name = name
   provider.slug = uniqueSlug(name, providers, input.slug, id)
   provider.baseUrl = baseUrl
+  provider.adapterId = nextAdapterId
   if (input.keyMethod !== undefined) {
     provider.keyMethod = input.keyMethod
   }
@@ -440,6 +477,7 @@ export async function updateProvider(
       baseUrl,
       validateKeys,
       now,
+      nextAdapterId,
     )
     skippedInvalid = materialised.skippedInvalid
     acceptedKeyCount = materialised.keys.length
@@ -472,18 +510,22 @@ export function deleteProvider(id: string, event?: H3Event) {
  * Serialise all providers (including secrets) for export.
  */
 export function exportProviders(event?: H3Event): ExportedProviders {
-  const providers = readStore(event).map(provider => ({
-    id: provider.id,
-    name: provider.name,
-    slug: provider.slug,
-    baseUrl: provider.baseUrl,
-    type: provider.type,
-    keyMethod: provider.keyMethod,
-    keys: provider.keys.map(key => ({ ...key })),
-    models: provider.models.map(model => ({ ...model })),
-    createdAt: provider.createdAt,
-    updatedAt: provider.updatedAt,
-  }))
+  const providers = readStore(event).map(provider => {
+    const normalized = normalizeProvider(provider)
+    return {
+      id: normalized.id,
+      name: normalized.name,
+      slug: normalized.slug,
+      baseUrl: normalized.baseUrl,
+      type: normalized.type,
+      adapterId: normalized.adapterId,
+      keyMethod: normalized.keyMethod,
+      keys: normalized.keys.map(key => ({ ...key })),
+      models: normalized.models.map(model => ({ ...model })),
+      createdAt: normalized.createdAt,
+      updatedAt: normalized.updatedAt,
+    }
+  })
 
   return {
     version: EXPORT_VERSION,
@@ -534,12 +576,14 @@ function cloneImportedProvider(source: Partial<Provider>, now: string): Provider
   const models = Array.isArray(source.models) ? source.models : []
   const id = typeof source.id === 'string' && source.id ? source.id : newId()
 
+  const baseUrl = String(source.baseUrl ?? '').trim().replace(/\/+$/, '')
   return {
     id,
     name: String(source.name ?? '').trim(),
     slug: String(source.slug ?? '').trim() || slugify(String(source.name ?? '')),
-    baseUrl: String(source.baseUrl ?? '').trim().replace(/\/+$/, ''),
+    baseUrl,
     type: 'openai-compatible',
+    adapterId: normalizeAdapterId(source.adapterId, baseUrl),
     keyMethod: normalizeProviderKeyMethod(source.keyMethod),
     keys: keys.map(key => ({
       id: typeof key?.id === 'string' && key.id ? key.id : newId(),

@@ -8,6 +8,9 @@
  * See anomalyco/opencode#49433 and related free-tier gate discussions.
  */
 
+import { aggregateOpenAiChatStream } from './streamAggregate'
+import type { ProviderAdapter } from './types'
+
 const OPENCODE_UA_VERSION = '1.19.3'
 /** Same alphabet OpenCode uses in `bZ` (A–Z, a–z, 0–9). */
 const BASE62 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
@@ -16,7 +19,10 @@ const ID_RANDOM_BYTES = 14
 let lastIdMs = 0
 let idCounter = 0
 
-export function isOpenCodeBaseUrl(baseUrl: string): boolean {
+export const OPENCODE_ADAPTER_ID = 'opencode'
+
+/** Hostname hint for migration / presets only — not the source of truth. */
+export function matchOpenCodeBaseUrl(baseUrl: string): boolean {
   try {
     const host = new URL(baseUrl).hostname.replace(/^www\./, '')
     return host === 'opencode.ai' || host.endsWith('.opencode.ai')
@@ -27,26 +33,22 @@ export function isOpenCodeBaseUrl(baseUrl: string): boolean {
 }
 
 /**
- * Canonical OpenCode inference root.
- * `/inference/v1` serves both GET /models and chat completions.
- * `/inference/openai/v1` only has chat (GET /models → 404).
+ * Keep the request host (proxy-safe). Only normalise the known path quirk:
+ * `/inference/openai/v1` → `/inference/v1` (models list lives on the latter).
  */
-export const OPENCODE_INFERENCE_BASE = 'https://opencode.ai/inference/v1'
-
 export function resolveOpenCodeBaseUrl(baseUrl: string): string {
-  if (!isOpenCodeBaseUrl(baseUrl)) {
-    return baseUrl.replace(/\/+$/, '')
-  }
+  const trimmed = baseUrl.replace(/\/+$/, '')
   try {
-    const url = new URL(baseUrl)
-    if (url.pathname.includes('/inference')) {
-      return OPENCODE_INFERENCE_BASE
+    const url = new URL(trimmed)
+    if (/\/inference\/openai(\/|$)/.test(url.pathname)) {
+      url.pathname = url.pathname.replace(/\/inference\/openai(\/|$)/, '/inference$1')
+      return url.toString().replace(/\/+$/, '')
     }
   }
   catch {
     // fall through
   }
-  return baseUrl.replace(/\/+$/, '')
+  return trimmed
 }
 
 /**
@@ -174,83 +176,21 @@ export function applyOpenCodeFreeTierBody(
   }
 }
 
-/** Aggregate an OpenAI SSE stream into a single non-stream chat.completion. */
-export async function aggregateOpenAiChatStream(
-  response: Response,
-): Promise<{ status: number, headers: Headers, payload: Record<string, unknown> }> {
-  const text = await response.text()
-  let id = ''
-  let model = ''
-  let created = Math.floor(Date.now() / 1000)
-  let content = ''
-  let reasoning = ''
-  let finishReason: string | null = null
-
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim()
-    if (!trimmed.startsWith('data:')) {
-      continue
+export const opencodeAdapter: ProviderAdapter = {
+  id: OPENCODE_ADAPTER_ID,
+  label: 'OpenCode',
+  match: matchOpenCodeBaseUrl,
+  resolveBaseUrl: resolveOpenCodeBaseUrl,
+  resolveApiKey: resolveOpenCodeApiKey,
+  upstreamHeaders(apiKey, ctx) {
+    const modelId = ctx?.modelId || ''
+    return openCodeUpstreamHeaders(resolveOpenCodeApiKey(apiKey, modelId))
+  },
+  prepareChatBody: applyOpenCodeFreeTierBody,
+  async finalizeChatResponse(response, ctx) {
+    if (!ctx.forcedStream || !response.ok || !response.body) {
+      return null
     }
-    const data = trimmed.slice(5).trim()
-    if (!data || data === '[DONE]') {
-      continue
-    }
-    try {
-      const chunk = JSON.parse(data) as {
-        id?: string
-        model?: string
-        created?: number
-        choices?: Array<{
-          finish_reason?: string | null
-          delta?: { content?: string, reasoning_content?: string }
-        }>
-      }
-      if (chunk.id) {
-        id = chunk.id
-      }
-      if (chunk.model) {
-        model = chunk.model
-      }
-      if (typeof chunk.created === 'number') {
-        created = chunk.created
-      }
-      const choice = chunk.choices?.[0]
-      if (choice?.delta?.content) {
-        content += choice.delta.content
-      }
-      if (choice?.delta?.reasoning_content) {
-        reasoning += choice.delta.reasoning_content
-      }
-      if (choice?.finish_reason) {
-        finishReason = choice.finish_reason
-      }
-    }
-    catch {
-      // ignore malformed SSE lines
-    }
-  }
-
-  const message: Record<string, unknown> = {
-    role: 'assistant',
-    content,
-  }
-  if (reasoning) {
-    message.reasoning_content = reasoning
-  }
-
-  return {
-    status: response.status,
-    headers: response.headers,
-    payload: {
-      id: id || `chatcmpl-${Date.now()}`,
-      object: 'chat.completion',
-      created,
-      model,
-      choices: [{
-        index: 0,
-        message,
-        finish_reason: finishReason || 'stop',
-      }],
-    },
-  }
+    return aggregateOpenAiChatStream(response)
+  },
 }

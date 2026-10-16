@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import type { FormSubmitEvent } from '@nuxt/ui'
-import type { ProviderKeyMethod, ProviderPublic } from '~/types/providers'
+import type {
+  ProviderAdapterPublic,
+  ProviderKeyMethod,
+  ProviderPublic,
+} from '~/types/providers'
 import { PROVIDER_KEY_METHOD_OPTIONS } from '~/types/providers'
 import { apiErrorMessage } from '~/utils/apiError'
 import type { ProviderPreset } from '~/utils/providerPresets'
@@ -12,6 +16,7 @@ type FormState = {
   name: string
   slug: string
   baseUrl: string
+  adapterId: string
   keyMethod: ProviderKeyMethod
   keys: string
   validateKeys: boolean
@@ -47,10 +52,24 @@ const state = reactive<FormState>({
   name: '',
   slug: '',
   baseUrl: '',
+  adapterId: 'default',
   keyMethod: 'roundabout',
   keys: '',
   validateKeys: true,
 })
+
+const { data: adapterCatalogue } = useAsyncData(
+  'provider-adapters',
+  () => $fetch<ProviderAdapterPublic[]>('/api/provider-adapters'),
+  { default: () => [] },
+)
+
+const adapterItems = computed(() =>
+  (adapterCatalogue.value || []).map(adapter => ({
+    label: adapter.label,
+    value: adapter.id,
+  })),
+)
 
 const keyMethodItems = PROVIDER_KEY_METHOD_OPTIONS.map(option => ({
   label: option.label,
@@ -74,6 +93,9 @@ function onPresetSelect(preset: ProviderPreset | null) {
 
   if (preset.baseUrl) {
     state.baseUrl = preset.baseUrl
+  }
+  if (preset.adapterId) {
+    state.adapterId = preset.adapterId
   }
 }
 
@@ -121,6 +143,7 @@ watch(open, (isOpen) => {
     state.name = props.editingProvider.name
     state.slug = props.editingProvider.slug
     state.baseUrl = props.editingProvider.baseUrl
+    state.adapterId = props.editingProvider.adapterId || 'default'
     state.keyMethod = props.editingProvider.keyMethod || 'roundabout'
     state.keys = ''
     state.validateKeys = false
@@ -133,6 +156,7 @@ function resetForm() {
   state.name = ''
   state.slug = ''
   state.baseUrl = ''
+  state.adapterId = 'default'
   state.keyMethod = 'roundabout'
   state.keys = ''
   state.validateKeys = true
@@ -152,7 +176,7 @@ async function onProbe() {
   try {
     probeResult.value = await $fetch('/api/providers/probe', {
       method: 'POST',
-      body: { baseUrl },
+      body: { baseUrl, adapterId: state.adapterId },
     })
   }
   catch (err: unknown) {
@@ -182,6 +206,7 @@ async function onSubmit(_event: FormSubmitEvent<FormState>) {
           name: state.name,
           slug: state.slug,
           baseUrl: state.baseUrl,
+          adapterId: state.adapterId,
           keys: state.keys,
           validateKeys: state.validateKeys,
         },
@@ -214,6 +239,7 @@ async function onSubmit(_event: FormSubmitEvent<FormState>) {
           name: state.name,
           slug: state.slug,
           baseUrl: state.baseUrl,
+          adapterId: state.adapterId,
           keyMethod: state.keyMethod,
           keys: state.keys,
           validateKeys: state.validateKeys,
@@ -319,6 +345,21 @@ async function onSubmit(_event: FormSubmitEvent<FormState>) {
             class="w-full"
             required
             @update:model-value="(value) => { slugTouched = true; state.slug = toSlug(String(value ?? '')) }"
+          />
+        </UFormField>
+
+        <UFormField
+          label="Adapter"
+          name="adapterId"
+          hint="Runtime behaviour for this provider. Kept when you change the Base URL (e.g. a proxy)."
+          required
+        >
+          <USelect
+            v-model="state.adapterId"
+            :items="adapterItems"
+            value-key="value"
+            placeholder="Select adapter"
+            class="w-full"
           />
         </UFormField>
 

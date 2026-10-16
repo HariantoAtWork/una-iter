@@ -184,7 +184,9 @@ export async function fetchProviderModels(providerId: string, event?: H3Event) {
   const providers = readStore(event)
   const provider = findProviderOrThrow(providers, providerId)
   const apiKey = firstUsableKey(provider)
-  const remoteModels = await fetchOpenAiCompatibleModels(provider.baseUrl, apiKey)
+  const remoteModels = await fetchOpenAiCompatibleModels(provider.baseUrl, apiKey, {
+    adapterId: provider.adapterId,
+  })
   const existing = new Map(provider.models.map(item => [item.modelId, item]))
   const now = new Date().toISOString()
   let added = 0

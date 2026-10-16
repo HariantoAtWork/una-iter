@@ -265,6 +265,7 @@ async function runJob(job: InternalJob) {
           apiKey,
           target.modelId,
           job.abortController.signal,
+          { adapterId: providerForKey.adapterId },
         )
       }
       catch (err) {

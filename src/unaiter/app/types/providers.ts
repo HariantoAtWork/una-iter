@@ -23,12 +23,19 @@ export type ProviderPublic = {
   name: string
   slug: string
   baseUrl: string
+  /** Server adapter id (e.g. default, opencode). */
+  adapterId: string
   keyMethod: ProviderKeyMethod
   keyCount: number
   validKeyCount: number
   modelCount: number
   enabledModelCount: number
   keys: ProviderKeyPublic[]
+}
+
+export type ProviderAdapterPublic = {
+  id: string
+  label: string
 }
 
 export type ModelStatusFilter = 'all' | 'enabled' | 'disabled'
