@@ -304,13 +304,14 @@ function toggleReasoning(message: ChatMessage) {
           :ui="{ root: 'w-full', list: 'w-full', trigger: 'flex-1 justify-center' }"
         />
 
-        <USelect
+        <USelectMenu
           v-if="hasModels"
           v-model="selectedModel"
           :items="modelItems"
-          value-key="value"
+          by="value"
           label-key="label"
           placeholder="Select a model"
+          :search-input="{ placeholder: 'Search models...' }"
           :disabled="sending"
           class="w-full"
         />
