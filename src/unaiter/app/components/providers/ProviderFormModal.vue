@@ -3,6 +3,10 @@ import type { FormSubmitEvent } from '@nuxt/ui'
 import type { ProviderKeyMethod, ProviderPublic } from '~/types/providers'
 import { PROVIDER_KEY_METHOD_OPTIONS } from '~/types/providers'
 import { apiErrorMessage } from '~/utils/apiError'
+import type { ProviderPreset } from '~/utils/providerPresets'
+import {
+  findPresetForBaseUrl,
+} from '~/utils/providerPresets'
 
 type FormState = {
   name: string
@@ -31,6 +35,7 @@ const toast = useToast()
 const slugTouched = ref(false)
 const pending = ref(false)
 const probing = ref(false)
+const selectedPreset = ref<ProviderPreset | null>(null)
 const probeResult = ref<{
   ok: boolean
   status: number | null
@@ -52,6 +57,31 @@ const keyMethodItems = PROVIDER_KEY_METHOD_OPTIONS.map(option => ({
   value: option.value,
   description: option.description,
 }))
+
+function onPresetSelect(preset: ProviderPreset | null) {
+  if (!preset) {
+    return
+  }
+
+  selectedPreset.value = preset
+
+  if (props.mode === 'create') {
+    state.name = preset.name
+    if (!slugTouched.value) {
+      state.slug = toSlug(preset.name)
+    }
+  }
+
+  if (preset.baseUrl) {
+    state.baseUrl = preset.baseUrl
+  }
+}
+
+const keysPlaceholder = computed(() => selectedPreset.value?.keyOptional
+  ? 'Not needed for this provider. Leave empty unless you want to add keys.'
+  : 'sk-key-here\nmy-id|sk-key-something\ncursor@harianto.dev|another-key')
+
+const presetKeyUrl = computed(() => selectedPreset.value?.keyUrl || '')
 
 const modalTitle = computed(() => props.mode === 'create' ? 'Add provider' : 'Edit provider')
 const modalDescription = computed(() =>
@@ -95,6 +125,7 @@ watch(open, (isOpen) => {
     state.keys = ''
     state.validateKeys = false
     slugTouched.value = true
+    selectedPreset.value = findPresetForBaseUrl(props.editingProvider.baseUrl)
   }
 })
 
@@ -107,6 +138,7 @@ function resetForm() {
   state.validateKeys = true
   slugTouched.value = false
   probeResult.value = null
+  selectedPreset.value = null
 }
 
 async function onProbe() {
@@ -238,6 +270,31 @@ async function onSubmit(_event: FormSubmitEvent<FormState>) {
         @submit="onSubmit"
       >
         <UFormField
+          label="Preset"
+          name="preset"
+          hint="Browse OpenAI-compatible providers, or start from a custom endpoint."
+        >
+          <ProvidersProviderPresetSelect
+            v-model="selectedPreset"
+            @select="onPresetSelect"
+          />
+          <p
+            v-if="presetKeyUrl"
+            class="mt-1 text-xs"
+          >
+            <a
+              :href="presetKeyUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              <UIcon name="i-lucide-key-round" class="size-3" />
+              Get an API key
+            </a>
+          </p>
+        </UFormField>
+
+        <UFormField
           label="Name"
           name="name"
           required
@@ -328,7 +385,7 @@ async function onSubmit(_event: FormSubmitEvent<FormState>) {
             v-model="state.keys"
             :rows="mode === 'create' ? 8 : 5"
             autoresize
-            placeholder="sk-key-here&#10;my-id|sk-key-something&#10;cursor@harianto.dev|another-key"
+            :placeholder="keysPlaceholder"
             class="w-full font-mono text-sm"
           />
         </UFormField>
