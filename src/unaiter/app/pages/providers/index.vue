@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import type { ProviderPublic } from '~/types/providers'
+import type { ProviderAdapterPublic, ProviderPublic } from '~/types/providers'
 import { providerKeyMethodLabel } from '~/types/providers'
 import { apiErrorMessage } from '~/utils/apiError'
+
+const DEFAULT_ADAPTER_ID = 'default'
 
 type ModalMode = 'create' | 'edit'
 
@@ -93,6 +95,21 @@ const settingsItems = [[
 ]]
 
 const { data, refresh } = await useFetch<{ providers: ProviderPublic[] }>('/api/providers')
+
+const { data: adapterCatalogue } = useAsyncData(
+  'provider-adapters',
+  () => $fetch<ProviderAdapterPublic[]>('/api/provider-adapters'),
+  // Auth cookie is client-only; SSR would 401 and cache an empty list.
+  { server: false, default: () => [] },
+)
+
+function adapterLabel(adapterId: string | undefined) {
+  if (!adapterId || adapterId === DEFAULT_ADAPTER_ID) {
+    return null
+  }
+  const known = adapterCatalogue.value?.find(adapter => adapter.id === adapterId)
+  return known ? known.label : adapterId
+}
 
 const isEmpty = computed(() => !data.value?.providers?.length)
 const editingProvider = computed(() =>
@@ -375,6 +392,14 @@ async function removeKey(provider: ProviderPublic, keyId: string) {
                       variant="subtle"
                     >
                       {{ providerKeyMethodLabel(provider.keyMethod) }}
+                    </UBadge>
+                    <UBadge
+                      v-if="adapterLabel(provider.adapterId)"
+                      color="info"
+                      variant="subtle"
+                      icon="i-lucide-plug"
+                    >
+                      {{ adapterLabel(provider.adapterId) }}
                     </UBadge>
                   </div>
                   <p class="text-sm text-muted">
