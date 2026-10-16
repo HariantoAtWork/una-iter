@@ -26,8 +26,12 @@ export function isOpenCodeBaseUrl(baseUrl: string): boolean {
   }
 }
 
-/** Free-tier fingerprint only works on the OpenAI-compatible inference path. */
-export const OPENCODE_INFERENCE_BASE = 'https://opencode.ai/inference/openai/v1'
+/**
+ * Canonical OpenCode inference root.
+ * `/inference/v1` serves both GET /models and chat completions.
+ * `/inference/openai/v1` only has chat (GET /models → 404).
+ */
+export const OPENCODE_INFERENCE_BASE = 'https://opencode.ai/inference/v1'
 
 export function resolveOpenCodeBaseUrl(baseUrl: string): string {
   if (!isOpenCodeBaseUrl(baseUrl)) {

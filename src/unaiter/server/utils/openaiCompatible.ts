@@ -2,6 +2,8 @@ import {
   applyOpenCodeFreeTierBody,
   isOpenCodeBaseUrl,
   openCodeUpstreamHeaders,
+  resolveOpenCodeApiKey,
+  resolveOpenCodeBaseUrl,
 } from './opencodeFingerprint'
 
 function authHeaders(
@@ -22,11 +24,15 @@ function authHeaders(
   return headers
 }
 
+function modelsUrl(baseUrl: string) {
+  return `${resolveOpenCodeBaseUrl(baseUrl)}/models`
+}
+
 export async function validateOpenAiCompatibleKey(
   baseUrl: string,
   apiKey: string,
 ): Promise<boolean> {
-  const url = `${baseUrl.replace(/\/+$/, '')}/models`
+  const url = modelsUrl(baseUrl)
 
   try {
     const response = await fetch(url, {
@@ -53,7 +59,7 @@ export async function probeOpenAiCompatibleBaseUrl(
   baseUrl: string,
   apiKey: string,
 ): Promise<BaseUrlProbeResult> {
-  const url = `${baseUrl.replace(/\/+$/, '')}/models`
+  const url = modelsUrl(baseUrl)
 
   try {
     const response = await fetch(url, {
@@ -133,7 +139,7 @@ export async function fetchOpenAiCompatibleModels(
   baseUrl: string,
   apiKey: string,
 ): Promise<FetchedModel[]> {
-  const url = `${baseUrl.replace(/\/+$/, '')}/models`
+  const url = modelsUrl(baseUrl)
 
   const response = await fetch(url, {
     method: 'GET',
@@ -174,7 +180,7 @@ export async function testOpenAiCompatibleModel(
   modelId: string,
   signal?: AbortSignal,
 ): Promise<boolean> {
-  const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`
+  const url = `${resolveOpenCodeBaseUrl(baseUrl)}/chat/completions`
   const timeout = AbortSignal.timeout(30_000)
   const combined = signal ? AbortSignal.any([timeout, signal]) : timeout
 
@@ -184,12 +190,15 @@ export async function testOpenAiCompatibleModel(
       max_tokens: 1,
       messages: [{ role: 'user', content: 'ping' }],
     }
-    const body = isOpenCodeBaseUrl(baseUrl)
+    const openCode = isOpenCodeBaseUrl(baseUrl)
+    const body = openCode
       ? applyOpenCodeFreeTierBody(baseBody).body
       : baseBody
+    // Console keys are often read-only; free models need Bearer public (same as chat proxy).
+    const key = openCode ? resolveOpenCodeApiKey(apiKey, modelId) : apiKey
     const response = await fetch(url, {
       method: 'POST',
-      headers: authHeaders(apiKey, baseUrl, { 'Content-Type': 'application/json' }),
+      headers: authHeaders(key, baseUrl, { 'Content-Type': 'application/json' }),
       body: JSON.stringify(body),
       signal: combined,
     })

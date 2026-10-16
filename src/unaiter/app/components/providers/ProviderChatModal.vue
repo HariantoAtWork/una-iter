@@ -57,8 +57,21 @@ const modelItems = computed(() =>
 )
 
 const hasModels = computed(() => models.value.length > 0)
+
+/** USelectMenu may hand back the item object if value-key is missing — normalise. */
+function selectedModelId(): string | null {
+  const raw = selectedModel.value as string | { value?: string } | null
+  if (!raw) {
+    return null
+  }
+  if (typeof raw === 'string') {
+    return raw
+  }
+  return typeof raw.value === 'string' ? raw.value : null
+}
+
 const canSend = computed(() =>
-  !!selectedModel.value && !!prompt.value.trim() && !sending.value,
+  !!selectedModelId() && !!prompt.value.trim() && !sending.value,
 )
 
 /** Only the last assistant message is ever mid-stream; render Markdown once done. */
@@ -66,7 +79,9 @@ function isStreamingMessage(index: number) {
   return sending.value
     && messages.value.at(-1)?.role === 'assistant'
     && index === messages.value.length - 1
-}watch(
+}
+
+watch(
   () => [open.value, props.provider?.id] as const,
   async ([isOpen, providerId]) => {
     if (!isOpen) {
@@ -93,7 +108,8 @@ watch(
 // When the filter hides the current selection, move to the first visible model.
 watch(statusFilter, () => {
   const visible = filteredModels.value
-  if (visible.some(model => model.modelId === selectedModel.value)) {
+  const current = selectedModelId()
+  if (current && visible.some(model => model.modelId === current)) {
     return
   }
   const first = visible[0]
@@ -131,8 +147,9 @@ async function loadModels(providerId: string) {
 }
 
 function publicModelId() {
-  return props.provider && selectedModel.value
-    ? `${props.provider.slug}/${selectedModel.value}`
+  const modelId = selectedModelId()
+  return props.provider && modelId
+    ? `${props.provider.slug}/${modelId}`
     : null
 }
 
@@ -331,7 +348,7 @@ function toggleReasoning(message: ChatMessage) {
           v-if="hasModels"
           v-model="selectedModel"
           :items="modelItems"
-          by="value"
+          value-key="value"
           label-key="label"
           placeholder="Select a model"
           :search-input="{ placeholder: 'Search models...' }"
