@@ -1,4 +1,5 @@
 import type { H3Event } from 'h3'
+import { prepareIntentRouterRequest } from '../../plugins/router/runtime/server/utils/intentRoute'
 import {
   markKeyExhausted,
   pickProviderKey,
@@ -35,7 +36,15 @@ function upstreamHeaders(apiKey: string): Record<string, string> {
 }
 
 export async function proxyChatCompletions(event: H3Event) {
-  const body = await readBody<Record<string, unknown>>(event)
+  const rawBody = await readBody<Record<string, unknown>>(event) || {}
+  const prepared = await prepareIntentRouterRequest(event, rawBody)
+
+  if (prepared.kind === 'complete') {
+    setHeader(event, 'content-type', 'application/json; charset=utf-8')
+    return prepared.response
+  }
+
+  const body = prepared.body
   const publicModelId = typeof body?.model === 'string' ? body.model : ''
 
   if (!publicModelId) {
