@@ -187,7 +187,7 @@ async function send() {
 
   controller.value = new AbortController()
   try {
-    const response = await fetch('/v1/chat/completions', {
+    const response = await fetch('/api/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, messages: payload, stream: true }),

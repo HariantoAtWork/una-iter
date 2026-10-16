@@ -36,6 +36,7 @@ export function parseRoutedModelId(publicId: string) {
 export function resolveRoutedModel(
   publicModelId: string,
   event?: H3Event,
+  allowDisabled = false,
 ): RoutedModel {
   const parsed = parseRoutedModelId(publicModelId)
   if (!parsed) {
@@ -61,7 +62,7 @@ export function resolveRoutedModel(
       statusMessage: `Model "${parsed.modelId}" not found on provider "${parsed.slug}"`,
     })
   }
-  if (!model.enabled) {
+  if (!model.enabled && !allowDisabled) {
     throw createError({
       statusCode: 404,
       statusMessage: `Model "${publicModelId}" is disabled`,

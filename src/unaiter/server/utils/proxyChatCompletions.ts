@@ -24,7 +24,13 @@ function isExhaustedStatus(status: number) {
   return status === 429 || status === 402
 }
 
-export async function proxyChatCompletions(event: H3Event) {
+/** Options for the chat proxy. */
+export type ProxyChatCompletionsOptions = {
+  /** Allow routing to disabled models (in-app chat test mode). */
+  allowDisabled?: boolean
+}
+
+export async function proxyChatCompletions(event: H3Event, options: ProxyChatCompletionsOptions = {}) {
   const body = await readBody<Record<string, unknown>>(event)
   const publicModelId = typeof body?.model === 'string' ? body.model : ''
 
@@ -35,7 +41,7 @@ export async function proxyChatCompletions(event: H3Event) {
     })
   }
 
-  const routed = resolveRoutedModel(publicModelId, event)
+  const routed = resolveRoutedModel(publicModelId, event, options.allowDisabled === true)
   const triedKeyIds = new Set<string>()
   // Local providers may have zero keys; still allow a single no-auth attempt.
   const maxAttempts = Math.max(1, routed.provider.keys.length)
