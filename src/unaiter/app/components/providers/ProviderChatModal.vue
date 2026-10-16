@@ -160,8 +160,9 @@ async function send() {
   prompt.value = ''
   sending.value = true
 
-  const assistant: ChatMessage = { role: 'assistant', content: '' }
-  messages.value.push(assistant)
+  // Push first, then keep the array index — Vue wraps the object in a proxy, so
+  // indexOf(rawObject) would miss and streaming updates would silently no-op.
+  const assistantIndex = messages.value.push({ role: 'assistant', content: '' }) - 1
 
   const payload = messages.value
     .filter(message => message.content.trim().length > 0)
@@ -178,10 +179,22 @@ async function send() {
 
     if (!response.ok || !response.body) {
       const detail = await response.text().catch(() => '')
-      throw new Error(detail || `Request failed (${response.status})`)
+      let summary = detail.slice(0, 280)
+      try {
+        const parsed = JSON.parse(detail) as {
+          statusMessage?: string
+          message?: string
+          error?: { message?: string }
+        }
+        summary = parsed.error?.message || parsed.statusMessage || parsed.message || summary
+      }
+      catch {
+        // keep raw body snippet
+      }
+      throw new Error(summary || `Request failed (${response.status})`)
     }
 
-    await readStream(response.body, assistant)
+    await readStream(response.body, assistantIndex)
   }
   catch (err: unknown) {
     if ((err as Error)?.name !== 'AbortError') {
@@ -190,8 +203,9 @@ async function send() {
         description: err instanceof Error ? err.message : apiErrorMessage(err),
         color: 'error',
       })
-      if (!assistant.content) {
-        messages.value = messages.value.filter(message => message !== assistant)
+      const assistant = messages.value[assistantIndex]
+      if (assistant && !assistant.content) {
+        messages.value.splice(assistantIndex, 1)
       }
     }
   }
@@ -202,13 +216,10 @@ async function send() {
   }
 }
 
-async function readStream(body: ReadableStream<Uint8Array>, target: ChatMessage) {
+async function readStream(body: ReadableStream<Uint8Array>, assistantIndex: number) {
   const reader = body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
-
-  // Mutate through the reactive proxy so streaming updates render live.
-  const live = messages.value[messages.value.indexOf(target)]
 
   for (;;) {
     const { done, value } = await reader.read()
@@ -228,10 +239,18 @@ async function readStream(body: ReadableStream<Uint8Array>, target: ChatMessage)
         }
         try {
           const parsed = JSON.parse(data) as {
+            error?: { message?: string, type?: string }
             choices?: Array<{
               delta?: { content?: string, reasoning_content?: string, reasoning?: string }
               message?: { content?: string, reasoning_content?: string }
             }>
+          }
+          if (parsed.error?.message) {
+            throw new Error(parsed.error.message)
+          }
+          const live = messages.value[assistantIndex]
+          if (!live) {
+            continue
           }
           const delta = parsed.choices?.[0]?.delta
           const message = parsed.choices?.[0]?.message
@@ -250,8 +269,12 @@ async function readStream(body: ReadableStream<Uint8Array>, target: ChatMessage)
             void scrollToBottom()
           }
         }
-        catch {
-          // Ignore keep-alive or non-JSON frames.
+        catch (err) {
+          // Ignore keep-alive / non-JSON frames; re-throw real stream errors.
+          if (err instanceof SyntaxError) {
+            continue
+          }
+          throw err
         }
       }
     }

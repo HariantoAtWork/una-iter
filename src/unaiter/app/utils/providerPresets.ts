@@ -166,8 +166,10 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   },
   {
     name: 'OpenCode',
-    baseUrl: 'https://opencode.ai/inference/v1',
+    baseUrl: 'https://opencode.ai/inference/openai/v1',
     keyUrl: 'https://opencode.ai/console/keys',
+    keyOptional: true,
+    keyPlaceholder: 'Leave empty for free models (uses public). Or paste an oc_sk_… key.',
     icon: 'i-lucide-box-select',
     category: 'Free tier',
   },

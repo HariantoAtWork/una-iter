@@ -1,4 +1,17 @@
-function authHeaders(apiKey: string, extra: Record<string, string> = {}): Record<string, string> {
+import {
+  applyOpenCodeFreeTierBody,
+  isOpenCodeBaseUrl,
+  openCodeUpstreamHeaders,
+} from './opencodeFingerprint'
+
+function authHeaders(
+  apiKey: string,
+  baseUrl: string,
+  extra: Record<string, string> = {},
+): Record<string, string> {
+  if (isOpenCodeBaseUrl(baseUrl)) {
+    return { ...openCodeUpstreamHeaders(apiKey), ...extra }
+  }
   const headers: Record<string, string> = {
     Accept: 'application/json',
     ...extra,
@@ -18,7 +31,7 @@ export async function validateOpenAiCompatibleKey(
   try {
     const response = await fetch(url, {
       method: 'GET',
-      headers: authHeaders(apiKey),
+      headers: authHeaders(apiKey, baseUrl),
       signal: AbortSignal.timeout(12_000),
     })
     return response.ok
@@ -45,7 +58,7 @@ export async function probeOpenAiCompatibleBaseUrl(
   try {
     const response = await fetch(url, {
       method: 'GET',
-      headers: authHeaders(apiKey),
+      headers: authHeaders(apiKey, baseUrl),
       signal: AbortSignal.timeout(12_000),
     })
 
@@ -124,7 +137,7 @@ export async function fetchOpenAiCompatibleModels(
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: authHeaders(apiKey),
+    headers: authHeaders(apiKey, baseUrl),
     signal: AbortSignal.timeout(20_000),
   })
 
@@ -166,14 +179,18 @@ export async function testOpenAiCompatibleModel(
   const combined = signal ? AbortSignal.any([timeout, signal]) : timeout
 
   try {
+    const baseBody: Record<string, unknown> = {
+      model: modelId,
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'ping' }],
+    }
+    const body = isOpenCodeBaseUrl(baseUrl)
+      ? applyOpenCodeFreeTierBody(baseBody).body
+      : baseBody
     const response = await fetch(url, {
       method: 'POST',
-      headers: authHeaders(apiKey, { 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        model: modelId,
-        max_tokens: 1,
-        messages: [{ role: 'user', content: 'ping' }],
-      }),
+      headers: authHeaders(apiKey, baseUrl, { 'Content-Type': 'application/json' }),
+      body: JSON.stringify(body),
       signal: combined,
     })
     return response.ok
